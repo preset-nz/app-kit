@@ -1,7 +1,7 @@
 //! The history contract: what Undo and Redo need to know, whatever the source.
 //!
 //! app-kit does not depend on any document model. The app implements [`History`] for
-//! the type it manages as Tauri state (rhizome's `Tree` behind a mutex, Shard's undo
+//! the type it manages as Tauri state (a document tree behind a mutex, an undo
 //! stack) and passes that type to [`AppKit::install`](crate::AppKit::install).
 
 use serde::Serialize;

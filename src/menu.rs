@@ -337,7 +337,10 @@ pub struct CommandState {
 
 /// The command table, labels and accelerators as declared in Rust.
 #[tauri::command]
-pub fn app_kit_commands<R: Runtime>(kit: State<'_, Kit<R>>) -> Vec<CommandInfo> {
+pub fn app_kit_commands<R: Runtime>(
+    _app: AppHandle<R>,
+    kit: State<'_, Kit<R>>,
+) -> Vec<CommandInfo> {
     kit.table.iter().map(Command::info).collect()
 }
 
