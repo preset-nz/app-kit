@@ -10,7 +10,7 @@ export {
 } from "./commands"
 export { CommandToolbar } from "./CommandToolbar"
 export { redo, undo, useHistory, type HistoryState } from "./history"
-export { noWebContextMenu } from "./noWebContextMenu"
+export { nativeContextMenu } from "./nativeContextMenu"
 export {
   createMultiSelection,
   createSelection,

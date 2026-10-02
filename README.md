@@ -45,6 +45,7 @@ tauri::Builder::default()
         preset_app_kit::app_kit_history,
         preset_app_kit::app_kit_undo,
         preset_app_kit::app_kit_redo,
+        preset_app_kit::app_kit_text_menu,
     ])
 ```
 
@@ -57,7 +58,7 @@ tauri::Builder::default()
 ## TypeScript
 
 ```tsx
-import { CommandToolbar, useCommands, noWebContextMenu } from "@preset.nz/app-kit"
+import { CommandToolbar, useCommands, nativeContextMenu } from "@preset.nz/app-kit"
 
 const { commands, run, shortcut } = useCommands(bindings) // bindings: Record<id, { icon, run, enabled, pressed, ... }>
 <CommandToolbar commands={commands} layout={{ leading: ["panel.left"], groups: [["edit.undo", "edit.redo"]] }} run={run} />
@@ -68,7 +69,7 @@ const { commands, run, shortcut } = useCommands(bindings) // bindings: Record<id
 - **`useHistory`, `undo`, `redo`**: the live `HistoryState`, and the same undo the menu takes. The Inspector's History list reads `undoLabels` and `redoLabels`.
 - **`useTextUndo`, `useTextFocus`, `isTextField`, `blurField`**: Cmd+Z undoes typing while a text field has focus, the document otherwise.
 - **`createSelection<T>(none)`**: single-select store with `get`, `use`, `select`, `clear`. **`createMultiSelection<T>(key)`**: the opt-in multi-select. **`createStore`, `useStore`**: the small store under both. Wrap them in your own narrow setters; there is no `setSelection`, and selection is not an undo step.
-- **`noWebContextMenu()`**: no WebKit context menu outside text fields.
+- **`nativeContextMenu()`**: no WebKit context menu. Right-click in a text field pops up a short native menu (Undo, Redo, Cut, Copy, Paste, Select All; needs `app_kit_text_menu` registered); elsewhere nothing, and app-drawn menus still open.
 
 The table arrives from Rust, so a plain browser tab (`just dev-web` in the playground) has no commands and an empty toolbar.
 

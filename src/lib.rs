@@ -25,6 +25,7 @@
 //!         preset_app_kit::app_kit_history,
 //!         preset_app_kit::app_kit_undo,
 //!         preset_app_kit::app_kit_redo,
+//!         preset_app_kit::app_kit_text_menu,
 //!     ])
 //! ```
 
@@ -35,6 +36,7 @@ mod menu;
 pub use command::{display_shortcut, Command, CommandInfo, Kind, MenuName};
 pub use history::{edit_titles, EditTitles, History, HistoryState};
 pub use menu::{
-    app_kit_commands, app_kit_history, app_kit_menu_state, app_kit_redo, app_kit_undo,
-    refresh_history, AppKit, CommandState, COMMAND_EVENT, HISTORY_EVENT, TEXT_UNDO_EVENT,
+    app_kit_commands, app_kit_history, app_kit_menu_state, app_kit_redo, app_kit_text_menu,
+    app_kit_undo, refresh_history, AppKit, CommandState, COMMAND_EVENT, HISTORY_EVENT,
+    TEXT_UNDO_EVENT,
 };

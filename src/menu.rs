@@ -17,10 +17,10 @@ use std::sync::Mutex;
 
 use serde::Deserialize;
 use tauri::menu::{
-    AboutMetadata, CheckMenuItem, IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem,
-    Submenu,
+    AboutMetadata, CheckMenuItem, ContextMenu, IsMenuItem, Menu, MenuItem, MenuItemKind,
+    PredefinedMenuItem, Submenu,
 };
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, Window};
 
 use crate::command::{Command, CommandInfo, Kind, MenuName};
 use crate::history::{edit_titles, History, HistoryState};
@@ -397,4 +397,31 @@ pub fn app_kit_redo<R: Runtime>(app: AppHandle<R>, kit: State<'_, Kit<R>>) -> Re
     let out = (kit.redo)(&app);
     refresh_history(&app);
     out
+}
+
+/// Pops up the native text-field menu at the pointer: Undo, Redo, Cut, Copy, Paste, Select All.
+/// Called from `nativeContextMenu` in the webview when a right-click lands in a text field,
+/// in place of WebKit's menu (Look Up, Translate, Spelling, Services, Inspect Element...). The
+/// predefined items act on the focused field through the responder chain, and macOS enables
+/// and disables them itself (Copy with no selection, Paste with an empty pasteboard).
+#[tauri::command]
+pub fn app_kit_text_menu<R: Runtime>(window: Window<R>) -> Result<(), String> {
+    let menu = text_menu(window.app_handle()).map_err(|e| e.to_string())?;
+    menu.popup(window).map_err(|e| e.to_string())
+}
+
+fn text_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    Menu::with_items(
+        app,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )
 }
