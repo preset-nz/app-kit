@@ -1,0 +1,39 @@
+{
+  "name": "@preset.nz/app-kit",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The behaviour of a preset.nz desktop app: command table, menu sync, Undo and Redo titles, text-field undo routing and a selection store, over the preset-app-kit Rust crate.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/preset-nz/app-kit.git"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src-ts/index.ts"
+  },
+  "files": [
+    "src-ts"
+  ],
+  "peerDependencies": {
+    "@preset.nz/ux-kit": "*",
+    "@tauri-apps/api": "^2",
+    "react": "^19"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@preset.nz/ux-kit": "link:../ux-kit",
+    "@tauri-apps/api": "^2.11.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^16.5.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.61.1"
+  }
+}

@@ -1,0 +1,16 @@
+[package]
+name = "preset-app-kit"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+description = "The behaviour of a preset.nz desktop app: one command table feeding the native menu and the toolbar, Undo and Redo that say what they undo, and text-field undo routing."
+repository = "https://github.com/preset-nz/app-kit"
+readme = "README.md"
+publish = false
+
+[lib]
+name = "preset_app_kit"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", default-features = false }
