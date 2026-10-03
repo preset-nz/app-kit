@@ -40,7 +40,7 @@ mod guard;
 mod history;
 mod menu;
 
-pub use command::{display_shortcut, Command, CommandInfo, Kind, MenuName};
+pub use command::{display_shortcut, shortcut, Command, CommandInfo, Kind, MenuName};
 pub use document::{
     choice_of, close_action, display_name, window_title, Choice, CloseAction, Document,
     DocumentState,

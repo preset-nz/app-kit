@@ -3,7 +3,8 @@
 use serde::Serialize;
 
 /// Which menu a command lives in. App-kit adds the standard items of each menu around
-/// the app's own.
+/// the app's own. The bar runs App · File · Edit · View · [domain menus] · Window · Help
+/// (`menu-standard.md`); a domain menu is named with [`Command::domain`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MenuName {
@@ -11,8 +12,29 @@ pub enum MenuName {
     File,
     Edit,
     View,
+    /// A domain menu, one per collection, named in the singular: Layer, Effect, Mesh.
+    Domain,
     Window,
     Help,
+}
+
+/// The family's reserved accelerators (`menu-standard.md`, decisions 2 to 4). Use these rather
+/// than writing the strings, so every app binds the same chord to the same meaning.
+pub mod shortcut {
+    /// File > Import…. `Cmd+I` stays free for Inspector.
+    pub const IMPORT: &str = "CmdOrCtrl+Shift+I";
+    /// Move the selected item earlier in its collection.
+    pub const MOVE_EARLIER: &str = "Alt+Up";
+    /// Move the selected item later in its collection.
+    pub const MOVE_LATER: &str = "Alt+Down";
+    /// Navigation Back, as in Finder and Safari. Not for reordering.
+    pub const BACK: &str = "CmdOrCtrl+[";
+    /// Navigation Forward.
+    pub const FORWARD: &str = "CmdOrCtrl+]";
+    /// View > Actual Size.
+    pub const ZOOM_RESET: &str = "CmdOrCtrl+0";
+    pub const ZOOM_IN: &str = "CmdOrCtrl+=";
+    pub const ZOOM_OUT: &str = "CmdOrCtrl+-";
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -37,6 +59,14 @@ pub struct Command {
     pub(crate) kind: Kind,
     pub(crate) enabled: bool,
     pub(crate) checked: bool,
+    /// The domain menu's title, when `menu` is [`MenuName::Domain`].
+    pub(crate) domain: Option<String>,
+    /// A submenu of the section this command sits in ("Add"), by title.
+    pub(crate) submenu: Option<String>,
+    /// The op's own category ("Colour", "Tone"). Inside a submenu, items group by it.
+    pub(crate) category: Option<String>,
+    /// The op's own tags, for the library and the command palette.
+    pub(crate) tags: Vec<String>,
 }
 
 impl Command {
@@ -51,6 +81,10 @@ impl Command {
             kind,
             enabled: true,
             checked: false,
+            domain: None,
+            submenu: None,
+            category: None,
+            tags: Vec::new(),
         }
     }
 
@@ -100,6 +134,33 @@ impl Command {
         self
     }
 
+    /// Put the command in a domain menu, named in the singular for its collection: "Effect".
+    /// Domain menus sit between View and Window in the order they are first declared.
+    pub fn domain(mut self, title: &str) -> Self {
+        self.menu = MenuName::Domain;
+        self.domain = Some(title.into());
+        self
+    }
+
+    /// Put the command in a submenu of its section: "Add" builds `Add ▸`. Commands with the same
+    /// submenu title in the same menu and section share it.
+    pub fn submenu(mut self, title: &str) -> Self {
+        self.submenu = Some(title.into());
+        self
+    }
+
+    /// The op's own category. Inside a submenu, items group by category in the order first
+    /// declared, separated; the library and palette read the same field.
+    pub fn category(mut self, category: &str) -> Self {
+        self.category = Some(category.into());
+        self
+    }
+
+    pub fn tags<S: Into<String>>(mut self, tags: impl IntoIterator<Item = S>) -> Self {
+        self.tags = tags.into_iter().map(Into::into).collect();
+        self
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -116,6 +177,11 @@ pub struct CommandInfo {
     /// For tooltips: `⌥⌘S` on macOS, `Ctrl+Alt+S` elsewhere.
     pub shortcut: Option<String>,
     pub menu: MenuName,
+    /// The domain menu's title, for `menu: domain`.
+    pub domain: Option<String>,
+    pub submenu: Option<String>,
+    pub category: Option<String>,
+    pub tags: Vec<String>,
     pub kind: Kind,
 }
 
@@ -131,6 +197,10 @@ impl Command {
                 .as_deref()
                 .map(|a| display_shortcut(a, cfg!(target_os = "macos"))),
             menu: self.menu,
+            domain: self.domain.clone(),
+            submenu: self.submenu.clone(),
+            category: self.category.clone(),
+            tags: self.tags.clone(),
             kind: self.kind,
         }
     }

@@ -17,7 +17,14 @@ export interface CommandSpec {
   accelerator: string | null
   /** Display form for tooltips, `⌥⌘S`. */
   shortcut: string | null
-  menu: "app" | "file" | "edit" | "view" | "window" | "help"
+  menu: "app" | "file" | "edit" | "view" | "domain" | "window" | "help"
+  /** The domain menu's title ("Effect"), for `menu: "domain"`. */
+  domain: string | null
+  /** The submenu of its section ("Add"), if any. */
+  submenu: string | null
+  /** The op's own category and tags, for the Add submenu, the library and the palette. */
+  category: string | null
+  tags: string[]
   kind: "item" | "toggle"
 }
 

@@ -68,3 +68,14 @@ export function createMultiSelection<T>(key: (item: T) => string): MultiSelectio
     subscribe: store.subscribe,
   }
 }
+
+/**
+ * Where a new item goes (`ux-patterns.md`, menu-standard decision 6): straight after the selected
+ * item, or at the end when nothing in `items` is selected. Returns the index to insert at.
+ */
+export function insertIndex<T>(items: readonly T[], isSelected: (item: T) => boolean): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (isSelected(items[i])) return i + 1
+  }
+  return items.length
+}

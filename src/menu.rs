@@ -45,6 +45,9 @@ type OnCommand<R> = Box<dyn Fn(&AppHandle<R>, &str) -> bool + Send + Sync>;
 type Read<R> = Box<dyn Fn(&AppHandle<R>) -> HistoryState + Send + Sync>;
 type Step<R> = Box<dyn Fn(&AppHandle<R>) -> Result<(), String> + Send + Sync>;
 type Item<R> = Box<dyn IsMenuItem<R>>;
+/// A menu by kind and, for a domain menu, title.
+type MenuKey = (MenuName, Option<String>);
+type Placed<T> = HashMap<MenuKey, BTreeMap<u8, Vec<T>>>;
 type Ask<R> = Box<dyn Fn(&AppHandle<R>) -> bool + Send + Sync>;
 
 /// The app's [`Document`], reached through Tauri state like the history is.
@@ -194,7 +197,8 @@ impl<R: Runtime> AppKit<R> {
         table.extend(self.commands);
 
         let mut items = HashMap::new();
-        let mut placed: HashMap<MenuName, BTreeMap<u8, Vec<Item<R>>>> = HashMap::new();
+        let mut placed: Placed<Slot<R>> = HashMap::new();
+        let mut domains: Vec<String> = Vec::new();
         for c in &table {
             let accel = c.accelerator.as_deref();
             let (kind, boxed): (MenuItemKind<R>, Item<R>) = match c.kind {
@@ -209,14 +213,30 @@ impl<R: Runtime> AppKit<R> {
                 }
             };
             items.insert(c.id.clone(), kind);
-            placed
-                .entry(c.menu)
+            let domain = (c.menu == MenuName::Domain).then(|| c.domain.clone().unwrap_or_default());
+            if let Some(d) = &domain {
+                if !domains.contains(d) {
+                    domains.push(d.clone());
+                }
+            }
+            let slots = placed
+                .entry((c.menu, domain))
                 .or_default()
                 .entry(c.section)
-                .or_default()
-                .push(boxed);
+                .or_default();
+            place(slots, c, boxed);
         }
-        let mut take = |m: MenuName| placed.remove(&m).unwrap_or_default();
+        let mut placed: Placed<Item<R>> = placed
+            .into_iter()
+            .map(|(k, sections)| {
+                let sections = sections
+                    .into_iter()
+                    .map(|(n, slots)| Ok((n, build_slots(app, slots)?)))
+                    .collect::<tauri::Result<_>>()?;
+                Ok((k, sections))
+            })
+            .collect::<tauri::Result<_>>()?;
+        let mut take = |m: MenuName| placed.remove(&(m, None)).unwrap_or_default();
 
         let about = AboutMetadata {
             name: Some(self.name.clone()),
@@ -279,11 +299,24 @@ impl<R: Runtime> AppKit<R> {
             vec![],
         )?;
         let help = take(MenuName::Help);
+        let domain_menus = domains
+            .into_iter()
+            .map(|d| {
+                let sections = placed
+                    .remove(&(MenuName::Domain, Some(d.clone())))
+                    .unwrap_or_default();
+                assemble(app, &d, vec![], sections, vec![])
+            })
+            .collect::<tauri::Result<Vec<_>>>()?;
 
         let menu = Menu::new(app)?;
-        for m in [&app_menu, &file_menu, &edit_menu, &view_menu, &window_menu] {
+        for m in [&app_menu, &file_menu, &edit_menu, &view_menu] {
             menu.append(m)?;
         }
+        for m in &domain_menus {
+            menu.append(m)?;
+        }
+        menu.append(&window_menu)?;
         if !help.is_empty() {
             menu.append(&assemble(app, "Help", vec![], help, vec![])?)?;
         }
@@ -351,21 +384,62 @@ impl<R: Runtime> AppKit<R> {
     }
 }
 
-/// head, then the app's sections in order, then the tail; a separator between non-empty groups.
-fn assemble<R: Runtime>(
+/// One entry in a menu section: an item, or a submenu holding items grouped by category.
+enum Slot<R: Runtime> {
+    Item(Item<R>),
+    Sub {
+        title: String,
+        groups: Vec<(Option<String>, Vec<Item<R>>)>,
+    },
+}
+
+/// Add a command's item to its section, inside its submenu and category group when it has them.
+fn place<R: Runtime>(slots: &mut Vec<Slot<R>>, c: &Command, item: Item<R>) {
+    let Some(title) = &c.submenu else {
+        slots.push(Slot::Item(item));
+        return;
+    };
+    let at = slots
+        .iter()
+        .position(|s| matches!(s, Slot::Sub { title: t, .. } if t == title));
+    let at = at.unwrap_or_else(|| {
+        slots.push(Slot::Sub {
+            title: title.clone(),
+            groups: Vec::new(),
+        });
+        slots.len() - 1
+    });
+    let Slot::Sub { groups, .. } = &mut slots[at] else {
+        unreachable!()
+    };
+    match groups.iter_mut().find(|(cat, _)| *cat == c.category) {
+        Some((_, group)) => group.push(item),
+        None => groups.push((c.category.clone(), vec![item])),
+    }
+}
+
+fn build_slots<R: Runtime>(app: &AppHandle<R>, slots: Vec<Slot<R>>) -> tauri::Result<Vec<Item<R>>> {
+    slots
+        .into_iter()
+        .map(|slot| match slot {
+            Slot::Item(i) => Ok(i),
+            Slot::Sub { title, groups } => {
+                let groups = groups.into_iter().map(|(_, g)| g).collect();
+                let sub = submenu(app, &title, groups)?;
+                Ok(Box::new(sub) as Item<R>)
+            }
+        })
+        .collect()
+}
+
+/// A submenu of groups, a separator between non-empty groups.
+fn submenu<R: Runtime>(
     app: &AppHandle<R>,
     name: &str,
-    head: Vec<Vec<Item<R>>>,
-    sections: BTreeMap<u8, Vec<Item<R>>>,
-    tail: Vec<Vec<Item<R>>>,
+    groups: Vec<Vec<Item<R>>>,
 ) -> tauri::Result<Submenu<R>> {
     let menu = Submenu::new(app, name, true)?;
-    let groups = head
-        .into_iter()
-        .chain(sections.into_values())
-        .chain(tail)
-        .filter(|g| !g.is_empty());
-    for (i, group) in groups.enumerate() {
+    for (i, group) in groups.into_iter().filter(|g| !g.is_empty()).enumerate() {
         if i > 0 {
             menu.append(&PredefinedMenuItem::separator(app)?)?;
         }
@@ -374,6 +448,22 @@ fn assemble<R: Runtime>(
         }
     }
     Ok(menu)
+}
+
+/// head, then the app's sections in order, then the tail; a separator between non-empty groups.
+fn assemble<R: Runtime>(
+    app: &AppHandle<R>,
+    name: &str,
+    head: Vec<Vec<Item<R>>>,
+    sections: BTreeMap<u8, Vec<Item<R>>>,
+    tail: Vec<Vec<Item<R>>>,
+) -> tauri::Result<Submenu<R>> {
+    let groups = head
+        .into_iter()
+        .chain(sections.into_values())
+        .chain(tail)
+        .collect();
+    submenu(app, name, groups)
 }
 
 /// Re-read the history, retitle and regate Edit > Undo / Redo, and emit [`HISTORY_EVENT`].

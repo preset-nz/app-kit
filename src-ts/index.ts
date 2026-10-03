@@ -15,6 +15,7 @@ export { nativeContextMenu } from "./nativeContextMenu"
 export {
   createMultiSelection,
   createSelection,
+  insertIndex,
   type MultiSelection,
   type Selection,
 } from "./selection"
