@@ -80,6 +80,17 @@ fn error_dialog<R: Runtime>(app: &AppHandle<R>, title: &str, message: &str) {
         .blocking_show();
 }
 
+/// Where a file panel starts: the document's own folder, else the app's documents folder.
+fn start_folder<R: Runtime>(
+    app: &AppHandle<R>,
+    kit: &Kit<R>,
+    doc: Option<&str>,
+) -> Option<PathBuf> {
+    doc.and_then(|p| Path::new(p).parent())
+        .map(Path::to_path_buf)
+        .or_else(|| kit.documents_folder.as_ref().and_then(|f| f(app)))
+}
+
 /// Save the document. With a file and no `force_panel` it writes there; otherwise the Save
 /// panel asks. Returns false when the panel was cancelled or the write failed (the failure is
 /// shown), so a caller never goes on to discard what was not saved.
@@ -101,7 +112,7 @@ fn save_current<R: Runtime>(app: &AppHandle<R>, kit: &Kit<R>, force_panel: bool)
             if let Some((name, ext)) = &kit.file_type {
                 panel = panel.add_filter(name, &[ext.as_str()]);
             }
-            if let Some(dir) = state.path.as_deref().and_then(|p| Path::new(p).parent()) {
+            if let Some(dir) = start_folder(app, kit, state.path.as_deref()) {
                 panel = panel.set_directory(dir);
             }
             match panel.blocking_save_file().and_then(|p| p.into_path().ok()) {
@@ -178,6 +189,10 @@ pub(crate) fn command<R: Runtime>(app: &AppHandle<R>, id: &str) -> bool {
             }
             let kit = app.state::<Kit<R>>();
             let mut panel = app.dialog().file();
+            let current = (kit.doc.state)(app).path;
+            if let Some(dir) = start_folder(app, &kit, current.as_deref()) {
+                panel = panel.set_directory(dir);
+            }
             if let Some((name, ext)) = &kit.file_type {
                 panel = panel.add_filter(name, &[ext.as_str()]);
             }

@@ -53,6 +53,7 @@ type Item<R> = Box<dyn IsMenuItem<R>>;
 type MenuKey = (MenuName, Option<String>);
 type Placed<T> = HashMap<MenuKey, BTreeMap<u8, Vec<T>>>;
 type Ask<R> = Box<dyn Fn(&AppHandle<R>) -> bool + Send + Sync>;
+type Folder<R> = Box<dyn Fn(&AppHandle<R>) -> Option<PathBuf> + Send + Sync>;
 
 /// The app's [`Document`], reached through Tauri state like the history is.
 pub(crate) struct DocFns<R: Runtime> {
@@ -81,6 +82,8 @@ pub struct Kit<R: Runtime> {
     pub(crate) ask: Option<Ask<R>>,
     /// The file type the Open and Save panels offer: (name, extension).
     pub(crate) file_type: Option<(String, String)>,
+    /// Where the panels start when the document has no folder of its own.
+    pub(crate) documents_folder: Option<Folder<R>>,
     /// A guard sequence is running (a dialog is up).
     pub(crate) busy: AtomicBool,
     /// The number of the last `Untitled-N` handed out. The first document is `Untitled-1`.
@@ -99,6 +102,7 @@ pub struct AppKit<R: Runtime> {
     on_command: Option<OnCommand<R>>,
     ask: Option<Ask<R>>,
     file_type: Option<(String, String)>,
+    documents_folder: Option<Folder<R>>,
 }
 
 impl<R: Runtime> AppKit<R> {
@@ -112,6 +116,7 @@ impl<R: Runtime> AppKit<R> {
             on_command: None,
             ask: None,
             file_type: None,
+            documents_folder: None,
         }
     }
 
@@ -163,6 +168,18 @@ impl<R: Runtime> AppKit<R> {
     /// adds the extension to a name typed without one.
     pub fn file_type(mut self, name: &str, extension: &str) -> Self {
         self.file_type = Some((name.into(), extension.into()));
+        self
+    }
+
+    /// The folder the Open and Save panels start in when the document has none of its own (an
+    /// Untitled document), such as `~/preset-nz/Shard/Patches` (`app-folders.md`). app-kit does not
+    /// depend on the app-folders package; the app passes its own lookup. Read each time a panel
+    /// opens, so a changed preference applies at once. `None`, or no hook, leaves it to macOS.
+    pub fn documents_folder(
+        mut self,
+        f: impl Fn(&AppHandle<R>) -> Option<PathBuf> + Send + Sync + 'static,
+    ) -> Self {
+        self.documents_folder = Some(Box::new(f));
         self
     }
 
@@ -360,6 +377,7 @@ impl<R: Runtime> AppKit<R> {
             },
             ask: self.ask,
             file_type: self.file_type,
+            documents_folder: self.documents_folder,
             busy: AtomicBool::new(false),
             untitled: AtomicU32::new(1),
             recents: Mutex::new(Recents::load(app)),
