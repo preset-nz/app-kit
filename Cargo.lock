@@ -2174,6 +2174,7 @@ name = "preset-app-kit"
 version = "0.0.1"
 dependencies = [
  "serde",
+ "serde_json",
  "tauri",
  "tauri-plugin-dialog",
 ]

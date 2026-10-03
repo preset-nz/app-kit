@@ -13,5 +13,6 @@ name = "preset_app_kit"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tauri = { version = "2", default-features = false }
 tauri-plugin-dialog = "2"

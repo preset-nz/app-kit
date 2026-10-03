@@ -1,6 +1,7 @@
 //! The file commands, the close guard and the quit guard.
 //!
-//! Every path that can discard the document (closing the window, Cmd+Q, New, Open) goes through
+//! Every path that can discard the document (closing the window, Cmd+Q, New, Open, Open Recent)
+//! goes through
 //! [`confirm_discard`]: the decision is [`close_action`], the dialog is native
 //! (`tauri-plugin-dialog`, three custom buttons), and Cancel at any step, the Save panel
 //! included, stops the whole thing.
@@ -15,15 +16,19 @@ use tauri::{AppHandle, Manager, RunEvent, Runtime, Window, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::document::{
-    choice_of, close_action, suggested_file_name, with_extension, Choice, CloseAction, CANCEL,
-    DONT_SAVE, SAVE,
+    can_revert, choice_of, close_action, revert_confirmed, suggested_file_name, with_extension,
+    Choice, CloseAction, CANCEL, DONT_SAVE, REVERT, SAVE,
 };
-use crate::menu::{refresh_history, Kit};
+use crate::menu::{clear_recents, forget_recent, note_recent, refresh_history, Kit};
 
 pub(crate) const FILE_NEW: &str = "file.new";
 pub(crate) const FILE_OPEN: &str = "file.open";
 pub(crate) const FILE_SAVE: &str = "file.save";
 pub(crate) const FILE_SAVE_AS: &str = "file.save_as";
+pub(crate) const FILE_REVERT: &str = "file.revert";
+/// `file.recent:0` is the newest entry of File > Open Recent.
+pub(crate) const FILE_RECENT: &str = "file.recent:";
+pub(crate) const FILE_RECENT_CLEAR: &str = "file.recent.clear";
 pub(crate) const FILE_CLOSE: &str = "file.close";
 pub(crate) const QUIT: &str = "app.quit";
 
@@ -107,6 +112,7 @@ fn save_current<R: Runtime>(app: &AppHandle<R>, kit: &Kit<R>, force_panel: bool)
     };
     match (kit.doc.save)(app, &path) {
         Ok(()) => {
+            note_recent(app, &path);
             refresh_history(app);
             true
         }
@@ -178,10 +184,7 @@ pub(crate) fn command<R: Runtime>(app: &AppHandle<R>, id: &str) -> bool {
             let Some(path) = panel.blocking_pick_file().and_then(|p| p.into_path().ok()) else {
                 return;
             };
-            match (kit.doc.open)(app, &path) {
-                Ok(()) => refresh_history(app),
-                Err(e) => error_dialog(app, "Could not open the file", &e),
-            }
+            open_path(app, &kit, &path);
         }),
         FILE_SAVE => exclusive(app, |app| {
             save_current(app, &app.state::<Kit<R>>(), false);
@@ -189,6 +192,8 @@ pub(crate) fn command<R: Runtime>(app: &AppHandle<R>, id: &str) -> bool {
         FILE_SAVE_AS => exclusive(app, |app| {
             save_current(app, &app.state::<Kit<R>>(), true);
         }),
+        FILE_REVERT => exclusive(app, revert),
+        FILE_RECENT_CLEAR => clear_recents(app),
         FILE_CLOSE => {
             // The focused window closes; the main window's close is guarded by `on_window_event`.
             let kit = app.state::<Kit<R>>();
@@ -202,9 +207,88 @@ pub(crate) fn command<R: Runtime>(app: &AppHandle<R>, id: &str) -> bool {
             }
         }
         QUIT => quit(app),
-        _ => return false,
+        _ => match id.strip_prefix(FILE_RECENT).and_then(|n| n.parse().ok()) {
+            Some(n) => exclusive(app, move |app| open_recent(app, n)),
+            None => return false,
+        },
     }
     true
+}
+
+/// Open `path` as the document, after the guard has run, and put it at the top of Open Recent.
+fn open_path<R: Runtime>(app: &AppHandle<R>, kit: &Kit<R>, path: &Path) {
+    match (kit.doc.open)(app, path) {
+        Ok(()) => {
+            note_recent(app, path);
+            refresh_history(app);
+        }
+        Err(e) => error_dialog(app, "Could not open the file", &e),
+    }
+}
+
+/// File > Open Recent > entry `n`. A file that has gone says so and leaves the list before the
+/// guard runs, so nothing is discarded for it. The document already open stays as it is.
+fn open_recent<R: Runtime>(app: &AppHandle<R>, n: usize) {
+    let kit = app.state::<Kit<R>>();
+    let Some(path) = kit
+        .recents
+        .lock()
+        .expect("recents lock")
+        .paths()
+        .get(n)
+        .cloned()
+    else {
+        return;
+    };
+    if !path.exists() {
+        let name = path
+            .file_name()
+            .unwrap_or(path.as_os_str())
+            .to_string_lossy();
+        error_dialog(
+            app,
+            "Could not open the file",
+            &format!("\u{201c}{name}\u{201d} is no longer where it was. It has been removed from Open Recent."),
+        );
+        forget_recent(app, &path);
+        return;
+    }
+    if (kit.doc.state)(app).path.as_deref() == Some(path.to_string_lossy().as_ref()) {
+        return;
+    }
+    if confirm_discard(app) {
+        open_path(app, &kit, &path);
+    }
+}
+
+/// File > Revert to Saved…: ask, then reload the file. Reloading starts an empty history, so the
+/// dialog says the changes can't be undone (`menu-standard.md`, decision 9).
+fn revert<R: Runtime>(app: &AppHandle<R>) {
+    let kit = app.state::<Kit<R>>();
+    let state = (kit.doc.state)(app);
+    let Some(path) = state.path.clone().filter(|_| can_revert(&state)) else {
+        return;
+    };
+    let result = app
+        .dialog()
+        .message("Your current changes will be lost. You can't undo this.")
+        .title(format!(
+            "Revert to the last saved version of \u{201c}{}\u{201d}?",
+            state.name
+        ))
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            REVERT.into(),
+            CANCEL.into(),
+        ))
+        .blocking_show_with_result();
+    if !revert_confirmed(&result) {
+        return;
+    }
+    match (kit.doc.open)(app, Path::new(&path)) {
+        Ok(()) => refresh_history(app),
+        Err(e) => error_dialog(app, "Could not revert", &e),
+    }
 }
 
 /// Quit, after the guard. With one document it asks once.

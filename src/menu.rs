@@ -12,7 +12,7 @@
 //! - The webview pushes enabled and checked state back through `app_kit_menu_state`.
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -24,9 +24,13 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, Window};
 
 use crate::command::{Command, CommandInfo, Kind, MenuName};
-use crate::document::{Document, DocumentState};
-use crate::guard::{self, FILE_CLOSE, FILE_NEW, FILE_OPEN, FILE_SAVE, FILE_SAVE_AS, QUIT};
+use crate::document::{can_revert, Document, DocumentState};
+use crate::guard::{
+    self, FILE_CLOSE, FILE_NEW, FILE_OPEN, FILE_RECENT, FILE_RECENT_CLEAR, FILE_REVERT, FILE_SAVE,
+    FILE_SAVE_AS, QUIT,
+};
 use crate::history::{edit_titles, HistoryState};
+use crate::recent::{self, Recents};
 
 /// Fired at the main window for each command the app does not handle natively. Payload: the id.
 pub const COMMAND_EVENT: &str = "command";
@@ -81,6 +85,9 @@ pub struct Kit<R: Runtime> {
     pub(crate) busy: AtomicBool,
     /// The number of the last `Untitled-N` handed out. The first document is `Untitled-1`.
     pub(crate) untitled: AtomicU32,
+    /// File > Open Recent's list, and the submenu rebuilt from it.
+    pub(crate) recents: Mutex<Recents>,
+    recent_menu: Submenu<R>,
 }
 
 /// Declares the app's commands and builds the menu bar from them.
@@ -179,13 +186,20 @@ impl<R: Runtime> AppKit<R> {
                 .section(0)
                 .disabled(),
         ];
-        // File: New and Open, then Close, then Save and Save As. The app's own File commands
-        // (section 1 by default) sit between New/Open and Close.
+        // File: New, Open… and Open Recent, then Close, then Save, Save As… and Revert to
+        // Saved…. The app's own File commands (section 1 by default) sit between Open Recent
+        // and Close. Revert has no accelerator (HIG) and Rust gates it from the document.
         table.push(file(FILE_NEW, "New", "CmdOrCtrl+N", 0));
         table.push(file(FILE_OPEN, "Open…", "CmdOrCtrl+O", 0));
         table.push(file(FILE_CLOSE, "Close", "CmdOrCtrl+W", 2));
         table.push(file(FILE_SAVE, "Save", "CmdOrCtrl+S", 3));
         table.push(file(FILE_SAVE_AS, "Save As…", "CmdOrCtrl+Shift+S", 3));
+        table.push(
+            Command::item(FILE_REVERT, "Revert to Saved…")
+                .menu(MenuName::File)
+                .section(3)
+                .disabled(),
+        );
         if self.settings {
             table.push(
                 Command::item(SETTINGS, "Settings…")
@@ -236,6 +250,14 @@ impl<R: Runtime> AppKit<R> {
                 Ok((k, sections))
             })
             .collect::<tauri::Result<_>>()?;
+        // Open Recent goes straight after New and Open…, the first two File items.
+        let recent_menu = Submenu::new(app, "Open Recent", true)?;
+        let file_first = placed
+            .entry((MenuName::File, None))
+            .or_default()
+            .entry(0)
+            .or_default();
+        file_first.insert(file_first.len().min(2), Box::new(recent_menu.clone()));
         let mut take = |m: MenuName| placed.remove(&(m, None)).unwrap_or_default();
 
         let about = AboutMetadata {
@@ -340,8 +362,11 @@ impl<R: Runtime> AppKit<R> {
             file_type: self.file_type,
             busy: AtomicBool::new(false),
             untitled: AtomicU32::new(1),
+            recents: Mutex::new(Recents::load(app)),
+            recent_menu,
         });
         app.set_menu(menu)?;
+        refresh_recents(app);
         refresh_history(app);
 
         app.on_menu_event(|handle, event| {
@@ -502,7 +527,84 @@ pub fn refresh_document<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(&kit.main_window) {
         let _ = window.set_title(&state.title);
     }
+    {
+        let items = kit.items.lock().expect("menu items lock");
+        if let Some(item) = items.get(FILE_REVERT).and_then(|i| i.as_menuitem()) {
+            let _ = item.set_enabled(can_revert(&state));
+        }
+    }
     let _ = app.emit_to(kit.main_window.as_str(), DOCUMENT_EVENT, &state);
+}
+
+/// Rebuild File > Open Recent from the list: one item per document, newest first, then Clear
+/// Menu (disabled when there is nothing to clear).
+fn refresh_recents<R: Runtime>(app: &AppHandle<R>) {
+    let Some(kit) = app.try_state::<Kit<R>>() else {
+        return;
+    };
+    let paths = kit.recents.lock().expect("recents lock").paths().to_vec();
+    let menu = &kit.recent_menu;
+    if let Ok(old) = menu.items() {
+        for item in old {
+            let _ = menu.remove(&item);
+        }
+    }
+    for (n, label) in recent::labels(&paths).into_iter().enumerate() {
+        let id = format!("{FILE_RECENT}{n}");
+        if let Ok(item) = MenuItem::with_id(app, id, label, true, None::<&str>) {
+            let _ = menu.append(&item);
+        }
+    }
+    if !paths.is_empty() {
+        if let Ok(sep) = PredefinedMenuItem::separator(app) {
+            let _ = menu.append(&sep);
+        }
+    }
+    if let Ok(clear) = MenuItem::with_id(
+        app,
+        FILE_RECENT_CLEAR,
+        "Clear Menu",
+        !paths.is_empty(),
+        None::<&str>,
+    ) {
+        let _ = menu.append(&clear);
+    }
+}
+
+/// Put `path` at the top of File > Open Recent and remember it. app-kit does this itself after
+/// Open…, Open Recent and Save; an app calls it when it opens a document some other way (a file
+/// handed over by the Finder, or relaunch restore).
+pub fn note_recent<R: Runtime>(app: &AppHandle<R>, path: &Path) {
+    change_recents(app, |r| r.note(path));
+}
+
+/// Take `path` off File > Open Recent, for a file that has gone.
+pub fn forget_recent<R: Runtime>(app: &AppHandle<R>, path: &Path) {
+    change_recents(app, |r| r.forget(path));
+}
+
+/// File > Open Recent > Clear Menu.
+pub(crate) fn clear_recents<R: Runtime>(app: &AppHandle<R>) {
+    change_recents(app, Recents::clear);
+}
+
+/// The recent documents, newest first. The first is the last document, the one relaunch restore reopens.
+pub fn recent_documents<R: Runtime>(app: &AppHandle<R>) -> Vec<PathBuf> {
+    app.try_state::<Kit<R>>()
+        .map(|kit| kit.recents.lock().expect("recents lock").paths().to_vec())
+        .unwrap_or_default()
+}
+
+fn change_recents<R: Runtime>(app: &AppHandle<R>, f: impl FnOnce(&mut Recents)) {
+    let Some(kit) = app.try_state::<Kit<R>>() else {
+        return;
+    };
+    {
+        let mut recents = kit.recents.lock().expect("recents lock");
+        f(&mut recents);
+        recents.store(app);
+    }
+    refresh_recents(app);
 }
 
 fn file(id: &str, label: &str, accelerator: &str, section: u8) -> Command {

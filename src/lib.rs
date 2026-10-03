@@ -5,8 +5,8 @@
 //! native menu bar from them, keeps Edit > Undo and Redo titled and gated from the
 //! history, routes Cmd+Z to a focused text field, and hands the command table to the
 //! webview so the toolbar never repeats a label or an accelerator. It also owns the File
-//! commands, the unsaved mark in the window title and the status bar, and the close and quit
-//! guard (a native Save / Don't Save / Cancel dialog). The app passes [`on_window_event`] to
+//! commands (Open Recent and Revert to Saved… included), the unsaved mark in the window title
+//! and the status bar, and the close and quit guard (a native Save / Don't Save / Cancel dialog). The app passes [`on_window_event`] to
 //! its builder and [`on_run_event`] to `run`.
 //!
 //! Like `preset-preferences` this is not a Tauri plugin: the app registers the
@@ -39,16 +39,19 @@ mod document;
 mod guard;
 mod history;
 mod menu;
+mod recent;
 
 pub use command::{display_shortcut, shortcut, Command, CommandInfo, Kind, MenuName};
 pub use document::{
-    choice_of, close_action, display_name, window_title, Choice, CloseAction, Document,
-    DocumentState,
+    can_revert, choice_of, close_action, display_name, revert_confirmed, window_title, Choice,
+    CloseAction, Document, DocumentState,
 };
 pub use guard::{on_run_event, on_window_event};
 pub use history::{edit_titles, EditTitles, History, HistoryState};
 pub use menu::{
     app_kit_commands, app_kit_document, app_kit_history, app_kit_menu_state, app_kit_redo,
-    app_kit_text_menu, app_kit_undo, refresh_document, refresh_history, AppKit, CommandState,
-    COMMAND_EVENT, DOCUMENT_EVENT, HISTORY_EVENT, TEXT_UNDO_EVENT,
+    app_kit_text_menu, app_kit_undo, forget_recent, note_recent, recent_documents,
+    refresh_document, refresh_history, AppKit, CommandState, COMMAND_EVENT, DOCUMENT_EVENT,
+    HISTORY_EVENT, TEXT_UNDO_EVENT,
 };
+pub use recent::{labels as recent_labels, Recents};

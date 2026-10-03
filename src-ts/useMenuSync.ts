@@ -4,8 +4,8 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 
 import type { Command } from "./commands"
 
-/** Rust owns these two: their titles and gating follow the history. */
-const HISTORY_IDS = new Set(["edit.undo", "edit.redo"])
+/** Rust owns these: Undo and Redo follow the history, Revert to Saved… the document. */
+const RUST_GATED_IDS = new Set(["edit.undo", "edit.redo", "file.revert"])
 
 /**
  * Connects the commands to the native menu: menu items arrive as `command` events carrying
@@ -33,7 +33,7 @@ export function useMenuSync(commands: Command[], textFocus: boolean) {
   const key = JSON.stringify(commands.map((c) => [c.id, c.enabled, c.pressed])) + textFocus
   useEffect(() => {
     const states = latest.current
-      .filter((c) => !HISTORY_IDS.has(c.id))
+      .filter((c) => !RUST_GATED_IDS.has(c.id))
       .map((c) => ({ id: c.id, enabled: c.enabled, checked: c.pressed }))
     invoke("app_kit_menu_state", { states, textFocus }).catch(() => {})
     // `key` stands for the commands' menu-relevant state; `latest` holds the commands.

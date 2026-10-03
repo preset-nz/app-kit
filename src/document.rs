@@ -130,6 +130,24 @@ pub fn choice_of(result: &MessageDialogResult) -> Choice {
     }
 }
 
+pub(crate) const REVERT: &str = "Revert";
+
+/// Whether Revert to Saved… may go ahead. Only the Revert button says yes (or Ok, where a
+/// platform gives back the kind rather than the label); anything else, a dismissed dialog
+/// included, keeps the changes.
+pub fn revert_confirmed(result: &MessageDialogResult) -> bool {
+    match result {
+        MessageDialogResult::Ok | MessageDialogResult::Yes => true,
+        MessageDialogResult::Custom(s) => s == REVERT,
+        _ => false,
+    }
+}
+
+/// Revert to Saved… is offered only for an unsaved document that has a file to go back to.
+pub fn can_revert(state: &DocumentState) -> bool {
+    state.unsaved && state.path.is_some()
+}
+
 /// The file name for the Save panel, with the extension the app declared.
 pub(crate) fn suggested_file_name(name: &str, extension: Option<&str>) -> String {
     match extension {
@@ -185,6 +203,31 @@ mod tests {
         assert_eq!(choice_of(&MessageDialogResult::No), Choice::DontSave);
         assert_eq!(choice_of(&MessageDialogResult::Cancel), Choice::Cancel);
         assert_eq!(choice_of(&custom("something else")), Choice::Cancel);
+    }
+
+    #[test]
+    fn revert_goes_ahead_only_on_revert() {
+        assert!(revert_confirmed(&MessageDialogResult::Custom(
+            "Revert".into()
+        )));
+        assert!(revert_confirmed(&MessageDialogResult::Ok));
+        assert!(!revert_confirmed(&MessageDialogResult::Custom(
+            "Cancel".into()
+        )));
+        assert!(!revert_confirmed(&MessageDialogResult::Cancel));
+    }
+
+    #[test]
+    fn revert_needs_unsaved_changes_and_a_file() {
+        let state = |unsaved, path: Option<&str>| DocumentState {
+            name: "a".into(),
+            path: path.map(Into::into),
+            unsaved,
+            title: "a".into(),
+        };
+        assert!(can_revert(&state(true, Some("/a.x"))));
+        assert!(!can_revert(&state(false, Some("/a.x"))));
+        assert!(!can_revert(&state(true, None)));
     }
 
     #[test]
