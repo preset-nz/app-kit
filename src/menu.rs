@@ -12,7 +12,8 @@
 //! - The webview pushes enabled and checked state back through `app_kit_menu_state`.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -23,7 +24,9 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, Window};
 
 use crate::command::{Command, CommandInfo, Kind, MenuName};
-use crate::history::{edit_titles, History, HistoryState};
+use crate::document::{Document, DocumentState};
+use crate::guard::{self, FILE_CLOSE, FILE_NEW, FILE_OPEN, FILE_SAVE, FILE_SAVE_AS, QUIT};
+use crate::history::{edit_titles, HistoryState};
 
 /// Fired at the main window for each command the app does not handle natively. Payload: the id.
 pub const COMMAND_EVENT: &str = "command";
@@ -31,6 +34,8 @@ pub const COMMAND_EVENT: &str = "command";
 pub const TEXT_UNDO_EVENT: &str = "text-undo";
 /// Emitted with a [`HistoryState`] whenever the history is refreshed.
 pub const HISTORY_EVENT: &str = "app-kit://history";
+/// Emitted at the main window with a [`DocumentState`] whenever the document is refreshed.
+pub const DOCUMENT_EVENT: &str = "app-kit://document";
 
 const UNDO: &str = "edit.undo";
 const REDO: &str = "edit.redo";
@@ -40,6 +45,18 @@ type OnCommand<R> = Box<dyn Fn(&AppHandle<R>, &str) -> bool + Send + Sync>;
 type Read<R> = Box<dyn Fn(&AppHandle<R>) -> HistoryState + Send + Sync>;
 type Step<R> = Box<dyn Fn(&AppHandle<R>) -> Result<(), String> + Send + Sync>;
 type Item<R> = Box<dyn IsMenuItem<R>>;
+type Ask<R> = Box<dyn Fn(&AppHandle<R>) -> bool + Send + Sync>;
+
+/// The app's [`Document`], reached through Tauri state like the history is.
+pub(crate) struct DocFns<R: Runtime> {
+    pub(crate) state: DocState<R>,
+    pub(crate) save: DocPath<R>,
+    pub(crate) open: DocPath<R>,
+    pub(crate) new_document: DocNew<R>,
+}
+type DocState<R> = Box<dyn Fn(&AppHandle<R>) -> DocumentState + Send + Sync>;
+type DocPath<R> = Box<dyn Fn(&AppHandle<R>, &Path) -> Result<(), String> + Send + Sync>;
+type DocNew<R> = Box<dyn Fn(&AppHandle<R>, u32) -> Result<(), String> + Send + Sync>;
 
 /// The managed state behind the commands.
 pub struct Kit<R: Runtime> {
@@ -47,11 +64,20 @@ pub struct Kit<R: Runtime> {
     items: Mutex<HashMap<String, MenuItemKind<R>>>,
     /// Whether a text field has focus in the webview (reported through `app_kit_menu_state`).
     text_focus: AtomicBool,
-    main_window: String,
+    pub(crate) main_window: String,
     on_command: Option<OnCommand<R>>,
     read: Read<R>,
     undo: Step<R>,
     redo: Step<R>,
+    pub(crate) doc: DocFns<R>,
+    /// "Ask to save changes when closing", from the app's preferences. None means on.
+    pub(crate) ask: Option<Ask<R>>,
+    /// The file type the Open and Save panels offer: (name, extension).
+    pub(crate) file_type: Option<(String, String)>,
+    /// A guard sequence is running (a dialog is up).
+    pub(crate) busy: AtomicBool,
+    /// The number of the last `Untitled-N` handed out. The first document is `Untitled-1`.
+    pub(crate) untitled: AtomicU32,
 }
 
 /// Declares the app's commands and builds the menu bar from them.
@@ -61,6 +87,8 @@ pub struct AppKit<R: Runtime> {
     settings: bool,
     main_window: String,
     on_command: Option<OnCommand<R>>,
+    ask: Option<Ask<R>>,
+    file_type: Option<(String, String)>,
 }
 
 impl<R: Runtime> AppKit<R> {
@@ -72,6 +100,8 @@ impl<R: Runtime> AppKit<R> {
             settings: false,
             main_window: "main".into(),
             on_command: None,
+            ask: None,
+            file_type: None,
         }
     }
 
@@ -107,9 +137,33 @@ impl<R: Runtime> AppKit<R> {
         self
     }
 
-    /// Build and set the menu bar, and manage the kit's state. `H` is the app's [`History`],
-    /// already managed as Tauri state.
-    pub fn install<H: History>(self, app: &AppHandle<R>) -> tauri::Result<()> {
+    /// Whether to ask before discarding unsaved changes on close: the preference "Ask to save
+    /// changes when closing", default on. app-kit does not depend on preferences; the app reads
+    /// its own. Off means a document with a file saves itself on close; Untitled still asks.
+    pub fn ask_to_save(
+        mut self,
+        f: impl Fn(&AppHandle<R>) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.ask = Some(Box::new(f));
+        self
+    }
+
+    /// The file type of the app's documents, for the Open and Save panels: a name for the
+    /// filter ("Rhizome document") and the extension without a dot ("rhizome"). The Save panel
+    /// adds the extension to a name typed without one.
+    pub fn file_type(mut self, name: &str, extension: &str) -> Self {
+        self.file_type = Some((name.into(), extension.into()));
+        self
+    }
+
+    /// Build and set the menu bar, and manage the kit's state. `H` is the app's [`Document`],
+    /// already managed as Tauri state. Registers `tauri-plugin-dialog` for the close guard and
+    /// the file panels, so the app must not register it too.
+    ///
+    /// The app also passes [`on_window_event`](crate::on_window_event) to its builder and
+    /// [`on_run_event`](crate::on_run_event) to `run`, or the close guard never sees the window close.
+    pub fn install<H: Document>(self, app: &AppHandle<R>) -> tauri::Result<()> {
+        app.plugin(tauri_plugin_dialog::init())?;
         let mut table = vec![
             Command::item(UNDO, "Undo")
                 .accelerator("CmdOrCtrl+Z")
@@ -122,6 +176,13 @@ impl<R: Runtime> AppKit<R> {
                 .section(0)
                 .disabled(),
         ];
+        // File: New and Open, then Close, then Save and Save As. The app's own File commands
+        // (section 1 by default) sit between New/Open and Close.
+        table.push(file(FILE_NEW, "New", "CmdOrCtrl+N", 0));
+        table.push(file(FILE_OPEN, "Open…", "CmdOrCtrl+O", 0));
+        table.push(file(FILE_CLOSE, "Close", "CmdOrCtrl+W", 2));
+        table.push(file(FILE_SAVE, "Save", "CmdOrCtrl+S", 3));
+        table.push(file(FILE_SAVE_AS, "Save As…", "CmdOrCtrl+Shift+S", 3));
         if self.settings {
             table.push(
                 Command::item(SETTINGS, "Settings…")
@@ -178,16 +239,16 @@ impl<R: Runtime> AppKit<R> {
                     Box::new(PredefinedMenuItem::hide(app, None)?),
                     Box::new(PredefinedMenuItem::hide_others(app, None)?),
                 ],
-                vec![Box::new(PredefinedMenuItem::quit(app, None)?)],
+                vec![Box::new(MenuItem::with_id(
+                    app,
+                    QUIT,
+                    format!("Quit {}", self.name),
+                    true,
+                    Some("CmdOrCtrl+Q"),
+                )?)],
             ],
         )?;
-        let file_menu = assemble(
-            app,
-            "File",
-            vec![],
-            take(MenuName::File),
-            vec![vec![Box::new(PredefinedMenuItem::close_window(app, None)?)]],
-        )?;
+        let file_menu = assemble(app, "File", vec![], take(MenuName::File), vec![])?;
         let edit_menu = assemble(
             app,
             "Edit",
@@ -236,6 +297,16 @@ impl<R: Runtime> AppKit<R> {
             read: Box::new(|app| HistoryState::of(&*app.state::<H>())),
             undo: Box::new(|app| app.state::<H>().undo(app)),
             redo: Box::new(|app| app.state::<H>().redo(app)),
+            doc: DocFns {
+                state: Box::new(|app| DocumentState::of(&*app.state::<H>())),
+                save: Box::new(|app, path| app.state::<H>().save(app, path)),
+                open: Box::new(|app, path| app.state::<H>().open(app, path)),
+                new_document: Box::new(|app, n| app.state::<H>().new_document(app, n)),
+            },
+            ask: self.ask,
+            file_type: self.file_type,
+            busy: AtomicBool::new(false),
+            untitled: AtomicU32::new(1),
         });
         app.set_menu(menu)?;
         refresh_history(app);
@@ -267,6 +338,7 @@ impl<R: Runtime> AppKit<R> {
                         refresh_history(handle);
                     }
                 }
+                id if guard::command(handle, id) => {}
                 id => {
                     let handled = kit.on_command.as_ref().is_some_and(|f| f(handle, id));
                     if !handled {
@@ -326,6 +398,28 @@ pub fn refresh_history<R: Runtime>(app: &AppHandle<R>) {
         }
     }
     let _ = app.emit(HISTORY_EVENT, &state);
+    refresh_document(app);
+}
+
+/// Re-read the document: set the main window's title (`Untitled-1 *`) and emit
+/// [`DOCUMENT_EVENT`] for the status bar. [`refresh_history`] calls it, so an app that calls that
+/// after every change keeps both current. Same lock rule as `refresh_history`.
+pub fn refresh_document<R: Runtime>(app: &AppHandle<R>) {
+    let Some(kit) = app.try_state::<Kit<R>>() else {
+        return;
+    };
+    let state = (kit.doc.state)(app);
+    if let Some(window) = app.get_webview_window(&kit.main_window) {
+        let _ = window.set_title(&state.title);
+    }
+    let _ = app.emit_to(kit.main_window.as_str(), DOCUMENT_EVENT, &state);
+}
+
+fn file(id: &str, label: &str, accelerator: &str, section: u8) -> Command {
+    Command::item(id, label)
+        .accelerator(accelerator)
+        .menu(MenuName::File)
+        .section(section)
 }
 
 #[derive(Deserialize)]
@@ -376,6 +470,12 @@ pub fn app_kit_menu_state<R: Runtime>(
             _ => {}
         }
     }
+}
+
+/// The document as it stands: name, path, unsaved, window title.
+#[tauri::command]
+pub fn app_kit_document<R: Runtime>(app: AppHandle<R>, kit: State<'_, Kit<R>>) -> DocumentState {
+    (kit.doc.state)(&app)
 }
 
 /// The history as it stands.

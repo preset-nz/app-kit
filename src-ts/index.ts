@@ -9,6 +9,7 @@ export {
   type ToolbarLayout,
 } from "./commands"
 export { CommandToolbar } from "./CommandToolbar"
+export { useDocument, type DocumentState } from "./document"
 export { redo, undo, useHistory, type HistoryState } from "./history"
 export { nativeContextMenu } from "./nativeContextMenu"
 export {
