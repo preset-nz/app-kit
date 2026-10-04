@@ -416,9 +416,13 @@ impl<R: Runtime> AppKit<R> {
             .collect::<tauri::Result<Vec<_>>>()?;
 
         let menu = Menu::new(app)?;
-        for m in [&app_menu, &file_menu, &edit_menu, &view_menu] {
-            menu.append(m)?;
+        menu.append(&app_menu)?;
+        // A library app with no File commands of its own gets no empty File menu.
+        if !file_menu.items()?.is_empty() {
+            menu.append(&file_menu)?;
         }
+        menu.append(&edit_menu)?;
+        menu.append(&view_menu)?;
         for m in &domain_menus {
             menu.append(m)?;
         }
