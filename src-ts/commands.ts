@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import type { ToolbarItemSpec } from "@preset.nz/ux-kit"
 
 import { redo, undo, useHistory, type HistoryState } from "./history"
 import { useTextUndo } from "./text"
@@ -136,29 +135,4 @@ export function useCommands(bindings: Record<string, Binding>) {
   /** A command's display shortcut, for anything that shows one (a panel header's tooltip). */
   const shortcut = useCallback((id: string) => table?.find((s) => s.id === id)?.shortcut ?? undefined, [table])
   return { commands, run, shortcut, history }
-}
-
-/** The toolbar is a subset of the commands: these ids, in this order, in these groups. */
-export interface ToolbarLayout {
-  leading?: string[]
-  groups: string[][]
-  trailing?: string[]
-}
-
-export function toItems(commands: Command[], ids: string[] = []): ToolbarItemSpec[] {
-  return ids.flatMap((id) => {
-    const c = commands.find((x) => x.id === id)
-    if (!c) return []
-    return [
-      {
-        id: c.id,
-        label: c.label,
-        icon: c.icon,
-        shortcut: c.shortcut,
-        enabled: c.enabled,
-        disabledReason: c.disabledReason,
-        pressed: c.pressed,
-      },
-    ]
-  })
 }

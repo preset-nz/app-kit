@@ -35,6 +35,7 @@
 //! ```
 
 mod command;
+mod config;
 mod document;
 mod guard;
 mod history;
@@ -42,6 +43,7 @@ mod menu;
 mod recent;
 
 pub use command::{display_shortcut, shortcut, Command, CommandInfo, Kind, MenuName};
+pub use config::{AppSlots, FileSlots, MenuConfig};
 pub use document::{
     can_revert, choice_of, close_action, display_name, revert_confirmed, window_title, Choice,
     CloseAction, Document, DocumentState,

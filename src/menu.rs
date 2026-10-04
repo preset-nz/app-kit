@@ -24,12 +24,13 @@ use tauri::menu::{
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, Window};
 
 use crate::command::{Command, CommandInfo, Kind, MenuName};
+use crate::config::MenuConfig;
 use crate::document::{can_revert, Document, DocumentState};
 use crate::guard::{
     self, FILE_CLOSE, FILE_NEW, FILE_OPEN, FILE_RECENT, FILE_RECENT_CLEAR, FILE_REVERT, FILE_SAVE,
     FILE_SAVE_AS, QUIT,
 };
-use crate::history::{edit_titles, HistoryState};
+use crate::history::{edit_titles, History, HistoryState};
 use crate::recent::{self, Recents};
 
 /// Fired at the main window for each command the app does not handle natively. Payload: the id.
@@ -78,6 +79,9 @@ pub struct Kit<R: Runtime> {
     undo: Step<R>,
     redo: Step<R>,
     pub(crate) doc: DocFns<R>,
+    /// False for an app installed with [`AppKit::install_history`]: there is no document, so
+    /// app-kit leaves the window title alone and never guards a close.
+    pub(crate) has_document: bool,
     /// "Ask to save changes when closing", from the app's preferences. None means on.
     pub(crate) ask: Option<Ask<R>>,
     /// The file type the Open and Save panels offer: (name, extension).
@@ -103,6 +107,8 @@ pub struct AppKit<R: Runtime> {
     ask: Option<Ask<R>>,
     file_type: Option<(String, String)>,
     documents_folder: Option<Folder<R>>,
+    /// From [`AppKit::menu_config`]; an unparseable file is reported by `install`.
+    config: Option<Result<MenuConfig, String>>,
 }
 
 impl<R: Runtime> AppKit<R> {
@@ -117,7 +123,16 @@ impl<R: Runtime> AppKit<R> {
             ask: None,
             file_type: None,
             documents_folder: None,
+            config: None,
         }
+    }
+
+    /// Which built-in items the app shows: its `menu.toml`, built in with `include_str!`.
+    /// See [`MenuConfig`]. A file that doesn't parse makes `install` fail. `[app] settings`
+    /// adds Settings… the way [`AppKit::settings`] does.
+    pub fn menu_config(mut self, source: &str) -> Self {
+        self.config = Some(MenuConfig::parse(source));
+        self
     }
 
     pub fn command(mut self, command: Command) -> Self {
@@ -191,6 +206,45 @@ impl<R: Runtime> AppKit<R> {
     /// [`on_run_event`](crate::on_run_event) to `run`, or the close guard never sees the window close.
     pub fn install<H: Document>(self, app: &AppHandle<R>) -> tauri::Result<()> {
         app.plugin(tauri_plugin_dialog::init())?;
+        let doc = DocFns {
+            state: Box::new(|app| DocumentState::of(&*app.state::<H>())),
+            save: Box::new(|app, path| app.state::<H>().save(app, path)),
+            open: Box::new(|app, path| app.state::<H>().open(app, path)),
+            new_document: Box::new(|app, n| app.state::<H>().new_document(app, n)),
+        };
+        self.build::<H>(app, Some(doc))
+    }
+
+    /// Install for an app without documents, such as a library: Undo and Redo run `H`, a
+    /// [`History`] already managed as Tauri state, and there is no File > New, Open, Save or
+    /// close guard. The menu config must turn every document slot off (Close may stay; with it
+    /// off, Window gains Close Window on Cmd+W). Does not register `tauri-plugin-dialog`, and
+    /// the app doesn't pass `on_window_event` or `on_run_event`.
+    pub fn install_history<H: History>(self, app: &AppHandle<R>) -> tauri::Result<()> {
+        let on = match &self.config {
+            Some(Ok(c)) => c.file.document_slots_on(),
+            Some(Err(_)) => Vec::new(), // reported by build
+            None => MenuConfig::default().file.document_slots_on(),
+        };
+        if !on.is_empty() {
+            return Err(config_error(format!(
+                "install_history needs these menu slots off: {}",
+                on.join(", ")
+            )));
+        }
+        self.build::<H>(app, None)
+    }
+
+    fn build<H: History>(self, app: &AppHandle<R>, doc: Option<DocFns<R>>) -> tauri::Result<()> {
+        let config = match self.config {
+            Some(Ok(c)) => Some(c),
+            Some(Err(e)) => return Err(config_error(e)),
+            None => None,
+        };
+        // Without a config every built-in item shows, as before menu configs existed.
+        let slots = config.as_ref().map(|c| c.file.clone()).unwrap_or_default();
+        let settings = self.settings || config.as_ref().is_some_and(|c| c.app.settings);
+        let has_document = doc.is_some();
         let mut table = vec![
             Command::item(UNDO, "Undo")
                 .accelerator("CmdOrCtrl+Z")
@@ -206,18 +260,30 @@ impl<R: Runtime> AppKit<R> {
         // File: New, Open… and Open Recent, then Close, then Save, Save As… and Revert to
         // Saved…. The app's own File commands (section 1 by default) sit between Open Recent
         // and Close. Revert has no accelerator (HIG) and Rust gates it from the document.
-        table.push(file(FILE_NEW, "New", "CmdOrCtrl+N", 0));
-        table.push(file(FILE_OPEN, "Open…", "CmdOrCtrl+O", 0));
-        table.push(file(FILE_CLOSE, "Close", "CmdOrCtrl+W", 2));
-        table.push(file(FILE_SAVE, "Save", "CmdOrCtrl+S", 3));
-        table.push(file(FILE_SAVE_AS, "Save As…", "CmdOrCtrl+Shift+S", 3));
-        table.push(
-            Command::item(FILE_REVERT, "Revert to Saved…")
-                .menu(MenuName::File)
-                .section(3)
-                .disabled(),
-        );
-        if self.settings {
+        if slots.new {
+            table.push(file(FILE_NEW, "New", "CmdOrCtrl+N", 0));
+        }
+        if slots.open {
+            table.push(file(FILE_OPEN, "Open…", "CmdOrCtrl+O", 0));
+        }
+        if slots.close {
+            table.push(file(FILE_CLOSE, "Close", "CmdOrCtrl+W", 2));
+        }
+        if slots.save {
+            table.push(file(FILE_SAVE, "Save", "CmdOrCtrl+S", 3));
+        }
+        if slots.save_as {
+            table.push(file(FILE_SAVE_AS, "Save As…", "CmdOrCtrl+Shift+S", 3));
+        }
+        if slots.revert {
+            table.push(
+                Command::item(FILE_REVERT, "Revert to Saved…")
+                    .menu(MenuName::File)
+                    .section(3)
+                    .disabled(),
+            );
+        }
+        if settings {
             table.push(
                 Command::item(SETTINGS, "Settings…")
                     .accelerator("CmdOrCtrl+,")
@@ -269,12 +335,14 @@ impl<R: Runtime> AppKit<R> {
             .collect::<tauri::Result<_>>()?;
         // Open Recent goes straight after New and Open…, the first two File items.
         let recent_menu = Submenu::new(app, "Open Recent", true)?;
-        let file_first = placed
-            .entry((MenuName::File, None))
-            .or_default()
-            .entry(0)
-            .or_default();
-        file_first.insert(file_first.len().min(2), Box::new(recent_menu.clone()));
+        if slots.open_recent {
+            let file_first = placed
+                .entry((MenuName::File, None))
+                .or_default()
+                .entry(0)
+                .or_default();
+            file_first.insert(file_first.len().min(2), Box::new(recent_menu.clone()));
+        }
         let mut take = |m: MenuName| placed.remove(&(m, None)).unwrap_or_default();
 
         let about = AboutMetadata {
@@ -327,16 +395,15 @@ impl<R: Runtime> AppKit<R> {
             take(MenuName::View),
             vec![vec![Box::new(PredefinedMenuItem::fullscreen(app, None)?)]],
         )?;
-        let window_menu = assemble(
-            app,
-            "Window",
-            vec![vec![
-                Box::new(PredefinedMenuItem::minimize(app, None)?),
-                Box::new(PredefinedMenuItem::maximize(app, None)?),
-            ]],
-            take(MenuName::Window),
-            vec![],
-        )?;
+        let mut window_head: Vec<Vec<Item<R>>> = vec![vec![
+            Box::new(PredefinedMenuItem::minimize(app, None)?),
+            Box::new(PredefinedMenuItem::maximize(app, None)?),
+        ]];
+        // Cmd+W has to close something: without File > Close, the window does.
+        if !slots.close {
+            window_head.push(vec![Box::new(PredefinedMenuItem::close_window(app, None)?)]);
+        }
+        let window_menu = assemble(app, "Window", window_head, take(MenuName::Window), vec![])?;
         let help = take(MenuName::Help);
         let domain_menus = domains
             .into_iter()
@@ -369,12 +436,8 @@ impl<R: Runtime> AppKit<R> {
             read: Box::new(|app| HistoryState::of(&*app.state::<H>())),
             undo: Box::new(|app| app.state::<H>().undo(app)),
             redo: Box::new(|app| app.state::<H>().redo(app)),
-            doc: DocFns {
-                state: Box::new(|app| DocumentState::of(&*app.state::<H>())),
-                save: Box::new(|app, path| app.state::<H>().save(app, path)),
-                open: Box::new(|app, path| app.state::<H>().open(app, path)),
-                new_document: Box::new(|app, n| app.state::<H>().new_document(app, n)),
-            },
+            doc: doc.unwrap_or_else(no_document),
+            has_document,
             ask: self.ask,
             file_type: self.file_type,
             documents_folder: self.documents_folder,
@@ -541,6 +604,9 @@ pub fn refresh_document<R: Runtime>(app: &AppHandle<R>) {
     let Some(kit) = app.try_state::<Kit<R>>() else {
         return;
     };
+    if !kit.has_document {
+        return;
+    }
     let state = (kit.doc.state)(app);
     if let Some(window) = app.get_webview_window(&kit.main_window) {
         let _ = window.set_title(&state.title);
@@ -623,6 +689,26 @@ fn change_recents<R: Runtime>(app: &AppHandle<R>, f: impl FnOnce(&mut Recents)) 
         recents.store(app);
     }
     refresh_recents(app);
+}
+
+/// Stand-ins for an app without a document: always saved, never a path. The document
+/// commands that would call them are absent from its menu.
+fn no_document<R: Runtime>() -> DocFns<R> {
+    DocFns {
+        state: Box::new(|_| DocumentState {
+            name: String::new(),
+            path: None,
+            unsaved: false,
+            title: String::new(),
+        }),
+        save: Box::new(|_, _| Err("this app has no documents".into())),
+        open: Box::new(|_, _| Err("this app has no documents".into())),
+        new_document: Box::new(|_, _| Err("this app has no documents".into())),
+    }
+}
+
+fn config_error(message: String) -> tauri::Error {
+    tauri::Error::Io(std::io::Error::other(message))
 }
 
 fn file(id: &str, label: &str, accelerator: &str, section: u8) -> Command {

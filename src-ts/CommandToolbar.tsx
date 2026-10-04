@@ -1,7 +1,8 @@
 import type { ComponentProps } from "react"
 import { ToolbarItems } from "@preset.nz/ux-kit"
 
-import { toItems, type Command, type ToolbarLayout } from "./commands"
+import type { Command } from "./commands"
+import { toItems, type ToolbarLayout } from "./toolbar"
 
 type Props = Omit<ComponentProps<typeof ToolbarItems>, "groups" | "leading" | "trailing" | "onCommand"> & {
   commands: Command[]

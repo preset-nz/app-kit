@@ -11,7 +11,8 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src-ts/index.ts"
+    ".": "./src-ts/index.ts",
+    "./core": "./src-ts/core.ts"
   },
   "files": [
     "src-ts"
@@ -35,5 +36,10 @@
     "react-dom": "^19.2.7",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.61.1"
+  },
+  "peerDependenciesMeta": {
+    "@preset.nz/ux-kit": {
+      "optional": true
+    }
   }
 }

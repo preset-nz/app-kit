@@ -1,24 +1,5 @@
-export {
-  bindCommands,
-  toItems,
-  useCommands,
-  useCommandTable,
-  type Binding,
-  type Command,
-  type CommandSpec,
-  type ToolbarLayout,
-} from "./commands"
+// Everything: the core plus the ux-kit toolbar bridge. Apps without ux-kit import
+// "@preset.nz/app-kit/core" instead.
+export * from "./core"
 export { CommandToolbar } from "./CommandToolbar"
-export { useDocument, type DocumentState } from "./document"
-export { redo, undo, useHistory, type HistoryState } from "./history"
-export { nativeContextMenu } from "./nativeContextMenu"
-export {
-  createMultiSelection,
-  createSelection,
-  insertIndex,
-  type MultiSelection,
-  type Selection,
-} from "./selection"
-export { createStore, useStore, type Store } from "./store"
-export { blurField, isTextField, useTextFocus, useTextUndo } from "./text"
-export { useMenuSync } from "./useMenuSync"
+export { toItems, type ToolbarLayout } from "./toolbar"
