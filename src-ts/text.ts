@@ -34,6 +34,17 @@ export function useTextFocus(): boolean {
       window.removeEventListener("focus", onWinFocus)
     }
   }, [])
+  // WebKit fires no focusout when the focused field is removed from the page (a name field
+  // that unmounts on Enter), which would leave Undo stuck on the field. While a field has
+  // focus, recheck whenever nodes go away.
+  useEffect(() => {
+    if (!focused) return
+    const observer = new MutationObserver(() => {
+      if (!isTextField(document.activeElement)) setFocused(false)
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [focused])
   return focused
 }
 
