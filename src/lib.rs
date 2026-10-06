@@ -15,6 +15,7 @@
 //!
 //! ```ignore
 //! tauri::Builder::default()
+//!     .plugin(preset_app_kit::window_state())
 //!     .manage(MyDoc::new())
 //!     .setup(|app| {
 //!         AppKit::<tauri::Wry>::new("My App")
@@ -31,6 +32,7 @@
 //!         preset_app_kit::app_kit_undo,
 //!         preset_app_kit::app_kit_redo,
 //!         preset_app_kit::app_kit_text_menu,
+//!         preset_app_kit::app_kit_document_note,
 //!     ])
 //! ```
 
@@ -41,6 +43,7 @@ mod guard;
 mod history;
 mod menu;
 mod recent;
+mod restore;
 
 pub use command::{display_shortcut, shortcut, Command, CommandInfo, Kind, MenuName};
 pub use config::{AppSlots, FileSlots, MenuConfig};
@@ -57,3 +60,4 @@ pub use menu::{
     HISTORY_EVENT, TEXT_UNDO_EVENT,
 };
 pub use recent::{labels as recent_labels, Recents};
+pub use restore::{app_kit_document_note, window_state, NOTE_EVENT};

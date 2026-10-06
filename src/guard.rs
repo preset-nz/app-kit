@@ -20,6 +20,9 @@ use crate::document::{
     Choice, CloseAction, CANCEL, DONT_SAVE, REVERT, SAVE,
 };
 use crate::menu::{clear_recents, forget_recent, note_recent, refresh_history, Kit};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use crate::restore::finder_path;
+use crate::restore::restore_last_document;
 
 pub(crate) const FILE_NEW: &str = "file.new";
 pub(crate) const FILE_OPEN: &str = "file.open";
@@ -307,6 +310,33 @@ fn revert<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// Quit, after the guard. With one document it asks once.
+/// A document the Finder handed over: a double-click, `open some.x`, a file dropped on the Dock
+/// icon. It wins over relaunch restore, and goes through the guard like Open….
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn open_from_finder<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
+    let Some(kit) = app.try_state::<Kit<R>>() else {
+        return;
+    };
+    if !kit.has_document {
+        return;
+    }
+    let ext = kit.file_type.as_ref().map(|(_, e)| e.as_str());
+    let Some(path) = finder_path(urls, ext) else {
+        return;
+    };
+    // Before anything else, so a Ready that comes after this leaves the document alone.
+    kit.finder_opened.store(true, Ordering::SeqCst);
+    exclusive(app, move |app| {
+        let kit = app.state::<Kit<R>>();
+        if (kit.doc.state)(app).path.as_deref() == Some(path.to_string_lossy().as_ref()) {
+            return;
+        }
+        if confirm_discard(app) {
+            open_path(app, &kit, &path);
+        }
+    });
+}
+
 fn quit<R: Runtime>(app: &AppHandle<R>) {
     exclusive(app, |app| {
         if confirm_discard(app) {
@@ -342,13 +372,20 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     });
 }
 
-/// Pass the app's run events here, for quits that do not come through the menu (the Dock's
+/// Pass the app's run events here: they reopen the last document at launch, open a document
+/// handed over by the Finder, and guard quits that do not come through the menu (the Dock's
 /// Quit, logging out). A quit the app asked for itself (`exit(0)`) carries a code and is let through.
 ///
 /// ```ignore
 /// builder.build(tauri::generate_context!())?.run(|app, event| preset_app_kit::on_run_event(app, &event));
 /// ```
 pub fn on_run_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
+    match event {
+        RunEvent::Ready => restore_last_document(app),
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        RunEvent::Opened { urls } => open_from_finder(app, urls),
+        _ => {}
+    }
     let RunEvent::ExitRequested {
         code: None, api, ..
     } = event

@@ -8,7 +8,7 @@ export {
   type Command,
   type CommandSpec,
 } from "./commands"
-export { useDocument, type DocumentState } from "./document"
+export { useDocument, useDocumentNotes, type DocumentState } from "./document"
 export { redo, undo, useHistory, type HistoryState } from "./history"
 export { nativeContextMenu } from "./nativeContextMenu"
 export {

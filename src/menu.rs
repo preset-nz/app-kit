@@ -32,6 +32,7 @@ use crate::guard::{
 };
 use crate::history::{edit_titles, History, HistoryState};
 use crate::recent::{self, Recents};
+use crate::restore::Notes;
 
 /// Fired at the main window for each command the app does not handle natively. Payload: the id.
 pub const COMMAND_EVENT: &str = "command";
@@ -95,6 +96,10 @@ pub struct Kit<R: Runtime> {
     /// File > Open Recent's list, and the submenu rebuilt from it.
     pub(crate) recents: Mutex<Recents>,
     recent_menu: Submenu<R>,
+    /// The Finder has handed over a document, so relaunch restore stands aside.
+    pub(crate) finder_opened: AtomicBool,
+    /// Notes for the webview (a last document that wouldn't reopen), held until it listens.
+    pub(crate) notes: Notes,
 }
 
 /// Declares the app's commands and builds the menu bar from them.
@@ -449,6 +454,8 @@ impl<R: Runtime> AppKit<R> {
             untitled: AtomicU32::new(1),
             recents: Mutex::new(Recents::load(app)),
             recent_menu,
+            finder_opened: AtomicBool::new(false),
+            notes: Notes::default(),
         });
         app.set_menu(menu)?;
         refresh_recents(app);
