@@ -13,7 +13,7 @@ Two packages, one repo, one version:
 
 Pre-1.0: a minor version can break things, a patch never does. Crate and npm versions move together, and the TypeScript types mirror the serde shape by hand.
 
-app-kit depends on ux-kit (the toolbar bridge renders `ToolbarItems`). ux-kit never depends on app-kit. Neither depends on rhizome: each app adapts its own history to the trait.
+The toolbar bridge renders ux-kit's `ToolbarItems`, so ux-kit is an optional peer; `@preset.nz/app-kit/core` needs none of it. ux-kit never depends on app-kit. Neither depends on rhizome: each app adapts its own history to the trait.
 
 ## Rust
 
