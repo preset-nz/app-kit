@@ -1,6 +1,6 @@
 [package]
 name = "preset-app-kit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "The behaviour of a preset.nz desktop app: one command table feeding the native menu and the toolbar, Undo and Redo that say what they undo, text-field undo routing, and saving with the unsaved mark and the close guard."
