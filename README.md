@@ -11,7 +11,7 @@ Two packages, one repo, one version:
 | `src/` | `preset-app-kit` (crate) | Command table, menu builder, `History` trait, Tauri commands |
 | `src-ts/` | `@preset.nz/app-kit` (npm) | `useCommands`, toolbar bridge, history hook, text-field undo, selection store |
 
-**Status:** 0.0.1, private. Not published; the crate has `publish = false` and the npm package `private: true`. The first consumer is the ux-kit playground, by path. Crate and npm versions move together, and the TypeScript types mirror the serde shape by hand.
+Pre-1.0: a minor version can break things, a patch never does. Crate and npm versions move together, and the TypeScript types mirror the serde shape by hand.
 
 app-kit depends on ux-kit (the toolbar bridge renders `ToolbarItems`). ux-kit never depends on app-kit. Neither depends on rhizome: each app adapts its own history to the trait.
 
