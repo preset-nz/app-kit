@@ -43,8 +43,10 @@ export function useDocumentNotes(onNote: (message: string) => void): void {
   useEffect(() => {
     let live = true
     const un = listen<string>("app-kit://note", (e) => handler.current(e.payload))
-    // Ask only once listening, so nothing falls between the held notes and the event.
-    un.then(() => invoke<string[]>("app_kit_document_note")).then(
+    // Ask only once listening, so nothing falls between the held notes and the event. And only
+    // while still mounted: taking them is once-only, so an unmounted effect (StrictMode mounts
+    // twice in dev) must leave them for the next.
+    un.then(() => (live ? invoke<string[]>("app_kit_document_note") : [])).then(
       (held) => live && held.forEach((m) => handler.current(m)),
       () => {},
     )
