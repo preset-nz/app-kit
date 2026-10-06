@@ -102,6 +102,15 @@ pub struct Kit<R: Runtime> {
     pub(crate) notes: Notes,
 }
 
+impl<R: Runtime> Kit<R> {
+    /// One menu item, cloned out from under the lock. Tauri's menu setters wait for the main
+    /// thread, and the main thread may be waiting for this lock (a refresh posted there while
+    /// a File command refreshes from its own thread), so no setter runs with it held.
+    fn item(&self, id: &str) -> Option<MenuItemKind<R>> {
+        self.items.lock().expect("menu items lock").get(id).cloned()
+    }
+}
+
 /// Declares the app's commands and builds the menu bar from them.
 pub struct AppKit<R: Runtime> {
     name: String,
@@ -592,16 +601,13 @@ pub fn refresh_history<R: Runtime>(app: &AppHandle<R>) {
     };
     let state = (kit.read)(app);
     let titles = edit_titles(&state, kit.text_focus.load(Ordering::Relaxed));
-    {
-        let items = kit.items.lock().expect("menu items lock");
-        for (id, text, enabled) in [
-            (UNDO, &titles.undo, titles.undo_enabled),
-            (REDO, &titles.redo, titles.redo_enabled),
-        ] {
-            if let Some(item) = items.get(id).and_then(|i| i.as_menuitem()) {
-                let _ = item.set_text(text);
-                let _ = item.set_enabled(enabled);
-            }
+    for (id, text, enabled) in [
+        (UNDO, &titles.undo, titles.undo_enabled),
+        (REDO, &titles.redo, titles.redo_enabled),
+    ] {
+        if let Some(item) = kit.item(id).as_ref().and_then(|i| i.as_menuitem()) {
+            let _ = item.set_text(text);
+            let _ = item.set_enabled(enabled);
         }
     }
     let _ = app.emit(HISTORY_EVENT, &state);
@@ -622,11 +628,8 @@ pub fn refresh_document<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(&kit.main_window) {
         let _ = window.set_title(&state.title);
     }
-    {
-        let items = kit.items.lock().expect("menu items lock");
-        if let Some(item) = items.get(FILE_REVERT).and_then(|i| i.as_menuitem()) {
-            let _ = item.set_enabled(can_revert(&state));
-        }
+    if let Some(item) = kit.item(FILE_REVERT).as_ref().and_then(|i| i.as_menuitem()) {
+        let _ = item.set_enabled(can_revert(&state));
     }
     let _ = app.emit_to(kit.main_window.as_str(), DOCUMENT_EVENT, &state);
 }
@@ -758,9 +761,8 @@ pub fn app_kit_menu_state<R: Runtime>(
         kit.text_focus.store(t, Ordering::Relaxed);
         refresh_history(&app);
     }
-    let items = kit.items.lock().expect("menu items lock");
     for s in states {
-        match items.get(&s.id) {
+        match kit.item(&s.id) {
             Some(MenuItemKind::MenuItem(i)) => {
                 if let Some(e) = s.enabled {
                     let _ = i.set_enabled(e);
