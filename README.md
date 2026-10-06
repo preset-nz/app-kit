@@ -1,6 +1,6 @@
 # app-kit
 
-The behaviour of a desktop app, shared across the preset.nz family: one command table feeding the native menu and the toolbar, Undo and Redo that say what they undo, Cmd+Z that never fights a text field, and a small selection store. [`ux-kit`](../ux-kit) holds the look; app-kit holds how the app acts.
+The behaviour of a desktop app, shared across the preset.nz family: one command table feeding the native menu and the toolbar, Undo and Redo that say what they undo, Cmd+Z that never fights a text field, and a small selection store. [`ux-kit`](https://github.com/preset-nz/ux-kit) holds the look; app-kit holds how the app acts.
 
 An app declares its commands in Rust and plugs in its history. app-kit builds the menu bar, keeps Undo and Redo titled and gated, and hands the same table to the webview, so a label or an accelerator is written once.
 
@@ -79,16 +79,16 @@ The table arrives from Rust, so a plain browser tab (`just dev-web` in the playg
 
 ## Consuming it
 
-Path dependencies while one app uses it:
-
 ```toml
 # src-tauri/Cargo.toml
-preset-app-kit = { path = "../../app-kit" }
+preset-app-kit = "0.1"
 ```
 
-```json
-"@preset.nz/app-kit": "link:../app-kit"
+```sh
+pnpm add @preset.nz/app-kit
 ```
+
+`@preset.nz/app-kit/core` is everything except the toolbar, for an app that doesn't use ux-kit; ux-kit is an optional peer.
 
 In Vite, add `@preset.nz/app-kit` (with `react`, `react-dom`, `@tauri-apps/api`, `@preset.nz/ux-kit`) to `resolve.dedupe`; a second copy of React fails only in the window. app-kit ships no Tailwind classes, so it needs no `@source` line.
 

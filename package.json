@@ -1,7 +1,6 @@
 {
   "name": "@preset.nz/app-kit",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
   "description": "The behaviour of a preset.nz desktop app: command table, menu sync, Undo and Redo titles, text-field undo routing and a selection store, over the preset-app-kit Rust crate.",
   "license": "MIT",
   "repository": {
@@ -18,7 +17,7 @@
     "src-ts"
   ],
   "peerDependencies": {
-    "@preset.nz/ux-kit": "*",
+    "@preset.nz/ux-kit": "^0.1.0",
     "@tauri-apps/api": "^2",
     "react": "^19"
   },
@@ -41,5 +40,8 @@
     "@preset.nz/ux-kit": {
       "optional": true
     }
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
