@@ -6,7 +6,7 @@ pre-commit:
   commands:
     biome:
       glob: "*.{ts,tsx,json}"
-      run: ./node_modules/.bin/biome check {staged_files}
+      run: ./node_modules/.bin/biome check --no-errors-on-unmatched {staged_files}
     rustfmt:
       glob: "*.rs"
       run: rustfmt --edition 2021 --check {staged_files}
