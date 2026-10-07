@@ -29,8 +29,3 @@ check: check-rust check-ts
 [group('quality')]
 fmt:
     cargo fmt
-
-# Try preset-licenses against an app: `just try-licenses ../../initiatives/strata`.
-[group('quality')]
-try-licenses app:
-    cd {{app}} && node {{justfile_directory()}}/scripts/licenses.mjs check

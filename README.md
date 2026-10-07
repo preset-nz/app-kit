@@ -94,36 +94,6 @@ pnpm add @preset.nz/app-kit
 
 In Vite, add `@preset.nz/app-kit` (with `react`, `react-dom`, `@tauri-apps/api`, `@preset.nz/ux-kit`) to `resolve.dedupe`; a second copy of React fails only in the window. app-kit ships no Tailwind classes, so it needs no `@source` line.
 
-## Licences
-
-`scripts/licenses.mjs` is the family licence gate and the third-party notices generator, shipped as the `preset-licenses` bin. Plain Node, no dependencies; run it from the app's repo root.
-
-```just
-# justfile
-[group('quality')]
-licenses:
-    pnpm exec preset-licenses check
-
-[group('build')]
-notices:
-    pnpm exec preset-licenses notices --out src-tauri/resources/ThirdPartyNotices.html --text THIRD-PARTY-LICENSES
-```
-
-`check` covers the whole tree (`cargo metadata --all-features`, `pnpm licenses list --json --prod=false`) against the allowlist in the policy doc ([`oblique/design/licensing.md`](../../guidance/projects/oblique/design/licensing.md)) and exits 1 with a list of offenders. `notices` covers only what ships (`cargo tree -e normal` for the app crate, `pnpm licenses list --json --prod`) and writes a self-contained HTML page with every licence text, identical texts grouped; `--text` adds a plain-text copy.
-
-Per-package exceptions are the app's, in an optional `licenses.config.json` at its root, each with a written reason that is also recorded in the policy doc in the same commit:
-
-```json
-{
-  "exceptions": { "cssparser": "MPL-2.0, via Tauri, unmodified. Reviewed 2026-09-12" },
-  "own": ["crates or packages to skip"],
-  "cargoPackage": "binary crate name",
-  "cargoManifest": "src-tauri/Cargo.toml"
-}
-```
-
-`cargoManifest` defaults to `src-tauri/Cargo.toml`, else `Cargo.toml`; Rust is skipped when neither exists. Workspace crates are skipped automatically.
-
 ## Development
 
 `just check` runs `cargo fmt --check`, clippy, `cargo test`, `tsc` and eslint. MIT.

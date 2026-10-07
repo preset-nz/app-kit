@@ -13,12 +13,8 @@
     ".": "./src-ts/index.ts",
     "./core": "./src-ts/core.ts"
   },
-  "bin": {
-    "preset-licenses": "./scripts/licenses.mjs"
-  },
   "files": [
-    "src-ts",
-    "scripts"
+    "src-ts"
   ],
   "peerDependencies": {
     "@preset.nz/ux-kit": "^0.1.0",
