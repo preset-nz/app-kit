@@ -10,6 +10,7 @@ prep:
     @echo "pnpm:              $(pnpm --version 2>/dev/null || echo MISSING)"
     @echo "cargo:             $(cargo --version 2>/dev/null || echo MISSING)"
     @echo "preset-compliance: $(preset-compliance --version 2>/dev/null || echo 'MISSING (cargo binstall preset-compliance)')"
+    @echo "knope:             $(knope --version 2>/dev/null || echo 'MISSING (cargo binstall knope)')"
 
 [group('setup')]
 install:
@@ -45,3 +46,14 @@ fmt:
 [group('quality')]
 licences:
     preset-compliance licences check
+
+# Version, changelog, commit and tag from the conventional commits since the last
+# tag (knope.toml). Push and publish stay by hand: guidance runbooks/publish-npm-package.md.
+[group('build')]
+release:
+    knope release
+
+# What `release` would do, without touching anything.
+[group('build')]
+release-preview:
+    knope release --dry-run
