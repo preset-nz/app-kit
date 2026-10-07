@@ -96,4 +96,4 @@ In Vite, add `@preset.nz/app-kit` (with `react`, `react-dom`, `@tauri-apps/api`,
 
 ## Development
 
-`just check` runs `cargo fmt --check`, clippy, `cargo test`, `tsc` and eslint. MIT.
+`just check` runs `cargo fmt --check`, clippy, `cargo test`, `tsc` and Biome. MIT.
