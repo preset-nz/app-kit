@@ -20,8 +20,9 @@
  *
  * Policy: guidance/projects/oblique/design/licensing.md (permissive-only).
  * Changes to ALLOWED below happen there in the same commit. Per-package
- * exceptions are app-level and live in the app's `licenses.config.json`, each
- * with a written reason, and are recorded in the policy doc too:
+ * exceptions every Tauri + Tailwind app carries are FAMILY_EXCEPTIONS below;
+ * anything particular to one app lives in its `licenses.config.json`, each
+ * with a written reason, and is recorded in the policy doc too:
  *
  *   {
  *     "exceptions": { "<package name>": "<reason>" },
@@ -59,6 +60,22 @@ const ALLOWED = new Set([
   'Unicode-3.0',
 ]);
 
+// Reviewed exceptions every app in the family carries, so no app repeats them.
+// MPL-2.0 is file-level copyleft: it binds changes to these packages' own files,
+// never our code, and they're all used unmodified. Recorded in the policy doc.
+const FAMILY_EXCEPTIONS = {
+  // Via Tauri (webview CSS handling, `dirs`). Reviewed in Shard 2026-09-12.
+  cssparser: 'MPL-2.0, via Tauri, unmodified',
+  'cssparser-macros': 'MPL-2.0, via Tauri, unmodified',
+  'dtoa-short': 'MPL-2.0, via Tauri, unmodified',
+  selectors: 'MPL-2.0, via Tauri, unmodified',
+  'option-ext': 'MPL-2.0, via Tauri (dirs), unmodified',
+  // Via Tailwind 4, build-time CSS tooling, not in the app. Reviewed in Oblique 2026-07-04.
+  lightningcss: 'MPL-2.0, Tailwind build tooling, unmodified',
+  'lightningcss-darwin-arm64': 'MPL-2.0, Tailwind build tooling, unmodified',
+  'lightningcss-darwin-x64': 'MPL-2.0, Tailwind build tooling, unmodified',
+};
+
 const root = process.cwd();
 
 function run(cmd, args, opts = {}) {
@@ -79,7 +96,7 @@ function loadConfig() {
   const path = join(root, 'licenses.config.json');
   const cfg = existsSync(path) ? readJson(path) : {};
   return {
-    exceptions: cfg.exceptions ?? {},
+    exceptions: { ...FAMILY_EXCEPTIONS, ...(cfg.exceptions ?? {}) },
     own: new Set(cfg.own ?? []),
     cargoPackage: cfg.cargoPackage,
     cargoManifest: cfg.cargoManifest,
