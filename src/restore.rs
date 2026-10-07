@@ -54,6 +54,8 @@ pub(crate) fn should_restore(path: Option<&str>, unsaved: bool, finder_opened: b
 
 /// The document among the URLs macOS sent: the last local file, with the app's extension when
 /// it has one. A folder, a web link or another app's file is not ours to open.
+// Called only from macOS's open-from-Finder handler; the tests run everywhere.
+#[cfg_attr(not(any(target_os = "macos", target_os = "ios")), allow(dead_code))]
 pub(crate) fn finder_path(urls: &[Url], extension: Option<&str>) -> Option<PathBuf> {
     urls.iter()
         .filter(|u| u.scheme() == "file")
