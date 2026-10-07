@@ -1,8 +1,15 @@
-# Standard verbs: install, check. The crate has no runtime of its own and the npm package
+# Standard verbs: prep, install, check. The crate has no runtime of its own and the npm package
 # ships unbuilt TypeScript, so `run` and `build` are absent.
 
 default:
     @just --list
+
+[group('setup')]
+prep:
+    @echo "node:              $(node --version 2>/dev/null || echo MISSING)"
+    @echo "pnpm:              $(pnpm --version 2>/dev/null || echo MISSING)"
+    @echo "cargo:             $(cargo --version 2>/dev/null || echo MISSING)"
+    @echo "preset-compliance: $(preset-compliance --version 2>/dev/null || echo 'MISSING (cargo binstall preset-compliance)')"
 
 [group('setup')]
 install:
@@ -25,9 +32,16 @@ check-ts:
 
 [group('quality')]
 check: check-rust check-ts
+    just licences
 
 # Writes the formatters' fixes (Biome, cargo fmt).
 [group('quality')]
 fmt:
     ./node_modules/.bin/biome check --write .
     cargo fmt
+
+# Licence check against the committed lock. Reads files only, no network.
+# Re-resolve with `preset-compliance licences scan` after changing dependencies.
+[group('quality')]
+licences:
+    preset-compliance licences check
