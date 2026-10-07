@@ -6,11 +6,11 @@ version = 1
 [[inputs]]
 path = "Cargo.lock"
 ecosystem = "cargo"
-sha256 = "03b32c91b82a5776045fe1d9d0378cc02db1fc4c84f5c1b6ccdf9dceaa38c016"
+sha256 = "efb1edfcf31400283c961a70474c51887c9e0532b2b6f7897441676954ccd4da"
 
 [[inputs]]
 path = "Cargo.toml"
-sha256 = "7715dd8e4e2ba743016d7876a8d63887e80abcbf7f12e0c35a09a8ffd6131eb3"
+sha256 = "7f7fc60ba735654dd31a3b5298157b4a468889cd38ae79f8748098a8708ddd71"
 
 [[inputs]]
 path = "pnpm-lock.yaml"
