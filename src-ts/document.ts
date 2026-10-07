@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
+import { useEffect, useRef, useState } from "react"
 
 /** The document as Rust reports it (`DocumentState`): from `app_kit_document`, pushed as `app-kit://document`. */
 export interface DocumentState {
@@ -47,7 +47,9 @@ export function useDocumentNotes(onNote: (message: string) => void): void {
     // while still mounted: taking them is once-only, so an unmounted effect (StrictMode mounts
     // twice in dev) must leave them for the next.
     un.then(() => (live ? invoke<string[]>("app_kit_document_note") : [])).then(
-      (held) => live && held.forEach((m) => handler.current(m)),
+      (held) => {
+        if (live) for (const m of held) handler.current(m)
+      },
       () => {},
     )
     return () => {

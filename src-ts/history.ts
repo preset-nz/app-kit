@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
+import { useEffect, useState } from "react"
 
 import { blurField } from "./text"
 

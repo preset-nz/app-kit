@@ -15,7 +15,7 @@ export function createStore<T>(initial: T): Store<T> {
     set(next) {
       if (Object.is(next, state)) return
       state = next
-      listeners.forEach((l) => l())
+      for (const l of listeners) l()
     },
     subscribe(l) {
       listeners.add(l)

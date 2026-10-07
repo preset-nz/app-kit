@@ -1,10 +1,13 @@
-import type { ComponentProps } from "react"
 import { ToolbarItems } from "@preset.nz/ux-kit"
+import type { ComponentProps } from "react"
 
 import type { Command } from "./commands"
-import { toItems, type ToolbarLayout } from "./toolbar"
+import { type ToolbarLayout, toItems } from "./toolbar"
 
-type Props = Omit<ComponentProps<typeof ToolbarItems>, "groups" | "leading" | "trailing" | "onCommand"> & {
+type Props = Omit<
+  ComponentProps<typeof ToolbarItems>,
+  "groups" | "leading" | "trailing" | "onCommand"
+> & {
   commands: Command[]
   layout: ToolbarLayout
   /** From `useCommands`: runs the command the menu would. */

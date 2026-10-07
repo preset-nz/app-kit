@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
 
-import { redo, undo, useHistory, type HistoryState } from "./history"
+import { type HistoryState, redo, undo, useHistory } from "./history"
 import { useTextUndo } from "./text"
 import { useMenuSync } from "./useMenuSync"
 
@@ -133,6 +133,9 @@ export function useCommands(bindings: Record<string, Binding>) {
     [commands],
   )
   /** A command's display shortcut, for anything that shows one (a panel header's tooltip). */
-  const shortcut = useCallback((id: string) => table?.find((s) => s.id === id)?.shortcut ?? undefined, [table])
+  const shortcut = useCallback(
+    (id: string) => table?.find((s) => s.id === id)?.shortcut ?? undefined,
+    [table],
+  )
   return { commands, run, shortcut, history }
 }

@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
+import { useEffect, useRef } from "react"
 
 import type { Command } from "./commands"
 
@@ -31,12 +31,11 @@ export function useMenuSync(commands: Command[], textFocus: boolean) {
   }, [])
 
   const key = JSON.stringify(commands.map((c) => [c.id, c.enabled, c.pressed])) + textFocus
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the commands' menu-relevant state (and textFocus); `latest` holds the commands themselves.
   useEffect(() => {
     const states = latest.current
       .filter((c) => !RUST_GATED_IDS.has(c.id))
       .map((c) => ({ id: c.id, enabled: c.enabled, checked: c.pressed }))
     invoke("app_kit_menu_state", { states, textFocus }).catch(() => {})
-    // `key` stands for the commands' menu-relevant state; `latest` holds the commands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 }

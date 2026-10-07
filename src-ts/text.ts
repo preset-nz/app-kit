@@ -1,13 +1,23 @@
-import { useEffect, useState } from "react"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
+import { useEffect, useState } from "react"
 
-const TEXT_INPUT_TYPES = new Set(["", "text", "search", "url", "email", "tel", "password", "number"])
+const TEXT_INPUT_TYPES = new Set([
+  "",
+  "text",
+  "search",
+  "url",
+  "email",
+  "tel",
+  "password",
+  "number",
+])
 
 /** True for elements that have their own typing undo: text inputs, textareas, contenteditable. */
 export function isTextField(el: EventTarget | Element | null): boolean {
   if (!(el instanceof HTMLElement)) return false
   if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled
-  if (el instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(el.type) && !el.readOnly && !el.disabled
+  if (el instanceof HTMLInputElement)
+    return TEXT_INPUT_TYPES.has(el.type) && !el.readOnly && !el.disabled
   return el.isContentEditable
 }
 
