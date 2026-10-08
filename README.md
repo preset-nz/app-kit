@@ -77,7 +77,7 @@ const { commands, run, shortcut } = useCommands(bindings) // bindings: Record<id
 - **`createSelection<T>(none)`**: single-select store with `get`, `use`, `select`, `clear`. **`createMultiSelection<T>(key)`**: the opt-in multi-select. **`createStore`, `useStore`**: the small store under both. Wrap them in your own narrow setters; there is no `setSelection`, and selection is not an undo step.
 - **`nativeContextMenu()`**: no WebKit context menu. Right-click in a text field pops up a short native menu (Undo, Redo, Cut, Copy, Paste, Select All; needs `app_kit_text_menu` registered); elsewhere nothing, and app-drawn menus still open.
 
-The table arrives from Rust, so a plain browser tab (`just dev-web` in the playground) has no commands and an empty toolbar.
+The table arrives from Rust. Apps run only in their Tauri window; a plain browser tab is not a supported host.
 
 ## Consuming it
 
