@@ -6,11 +6,11 @@ version = 1
 [[inputs]]
 path = "Cargo.lock"
 ecosystem = "cargo"
-sha256 = "efb1edfcf31400283c961a70474c51887c9e0532b2b6f7897441676954ccd4da"
+sha256 = "5ce13dc5db1d8abb35e98eafaf56b35487a80fa6f12261b9d957f0a4cc18d162"
 
 [[inputs]]
 path = "Cargo.toml"
-sha256 = "7f7fc60ba735654dd31a3b5298157b4a468889cd38ae79f8748098a8708ddd71"
+sha256 = "7f25903c87a2fb14d04c38344e27b86b44494fd8dab0571621342b7f94992fef"
 
 [[inputs]]
 path = "pnpm-lock.yaml"
@@ -2492,14 +2492,6 @@ scope = "build"
 [[packages]]
 ecosystem = "cargo"
 name = "toml"
-version = "0.9.12+spec-1.1.0"
-source = "registry"
-declared = "MIT OR Apache-2.0"
-scope = "shipped"
-
-[[packages]]
-ecosystem = "cargo"
-name = "toml"
 version = "1.1.6+spec-1.1.0"
 source = "registry"
 declared = "MIT OR Apache-2.0"
@@ -2512,14 +2504,6 @@ version = "0.6.3"
 source = "registry"
 declared = "MIT OR Apache-2.0"
 scope = "build"
-
-[[packages]]
-ecosystem = "cargo"
-name = "toml_datetime"
-version = "0.7.5+spec-1.1.0"
-source = "registry"
-declared = "MIT OR Apache-2.0"
-scope = "shipped"
 
 [[packages]]
 ecosystem = "cargo"
@@ -3240,14 +3224,6 @@ version = "0.5.40"
 source = "registry"
 declared = "MIT"
 scope = "build"
-
-[[packages]]
-ecosystem = "cargo"
-name = "winnow"
-version = "0.7.15"
-source = "registry"
-declared = "MIT"
-scope = "shipped"
 
 [[packages]]
 ecosystem = "cargo"
