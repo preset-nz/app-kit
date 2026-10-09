@@ -31,7 +31,7 @@
     "lefthook": "^2.1.17",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "typescript": "~5.9.3"
+    "typescript": "~7.0.2"
   },
   "peerDependenciesMeta": {
     "@preset.nz/ux-kit": {
