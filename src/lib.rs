@@ -32,7 +32,6 @@
 //!         preset_app_kit::app_kit_undo,
 //!         preset_app_kit::app_kit_redo,
 //!         preset_app_kit::app_kit_text_menu,
-//!         preset_app_kit::app_kit_document_note,
 //!     ])
 //! ```
 

@@ -1,8 +1,7 @@
 //! File > Open Recent: the documents opened or saved most recently, newest first.
 //!
 //! The list lives in `recent-documents.json` in the app's data directory, so it survives a
-//! relaunch. Its first entry is the last document, which relaunch restore reads rather than
-//! keeping a second store (`menu-standard.md`, decision 10). Neither muda nor a Tauri plugin
+//! relaunch. Its first entry is the last document (`menu-standard.md`, decision 10). Neither muda nor a Tauri plugin
 //! keeps recents, so app-kit does.
 
 use std::fs;

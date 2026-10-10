@@ -22,7 +22,6 @@ use crate::document::{
 use crate::menu::{clear_recents, forget_recent, note_recent, refresh_history, Kit};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use crate::restore::finder_path;
-use crate::restore::restore_last_document;
 
 pub(crate) const FILE_NEW: &str = "file.new";
 pub(crate) const FILE_OPEN: &str = "file.open";
@@ -311,7 +310,7 @@ fn revert<R: Runtime>(app: &AppHandle<R>) {
 
 /// Quit, after the guard. With one document it asks once.
 /// A document the Finder handed over: a double-click, `open some.x`, a file dropped on the Dock
-/// icon. It wins over relaunch restore, and goes through the guard like Open….
+/// icon. It goes through the guard like Open….
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 fn open_from_finder<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
     let Some(kit) = app.try_state::<Kit<R>>() else {
@@ -324,8 +323,6 @@ fn open_from_finder<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
     let Some(path) = finder_path(urls, ext) else {
         return;
     };
-    // Before anything else, so a Ready that comes after this leaves the document alone.
-    kit.finder_opened.store(true, Ordering::SeqCst);
     exclusive(app, move |app| {
         let kit = app.state::<Kit<R>>();
         if (kit.doc.state)(app).path.as_deref() == Some(path.to_string_lossy().as_ref()) {
@@ -372,7 +369,7 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     });
 }
 
-/// Pass the app's run events here: they reopen the last document at launch, open a document
+/// Pass the app's run events here: they open a document
 /// handed over by the Finder, and guard quits that do not come through the menu (the Dock's
 /// Quit, logging out). A quit the app asked for itself (`exit(0)`) carries a code and is let through.
 ///
@@ -381,7 +378,6 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
 /// ```
 pub fn on_run_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
     match event {
-        RunEvent::Ready => restore_last_document(app),
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         RunEvent::Opened { urls } => open_from_finder(app, urls),
         _ => {}

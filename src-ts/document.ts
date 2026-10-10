@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
 /** The document as Rust reports it (`DocumentState`): from `app_kit_document`, pushed as `app-kit://document`. */
 export interface DocumentState {
@@ -31,30 +31,7 @@ export function useDocument(): DocumentState | null {
 }
 
 /**
- * Notes about the document for the app to show, such as a last document that wouldn't reopen
- * at launch. Each arrives once: the ones held from before the webview listened, then any later
- * `app-kit://note`. Show them as the app shows a passing message (a snackbar), never a dialog.
+ * Kept so apps built against 0.1 still compile: launch no longer reopens the last document, so
+ * there are no notes to show. Remove the call when convenient.
  */
-export function useDocumentNotes(onNote: (message: string) => void): void {
-  const handler = useRef(onNote)
-  useEffect(() => {
-    handler.current = onNote
-  }, [onNote])
-  useEffect(() => {
-    let live = true
-    const un = listen<string>("app-kit://note", (e) => handler.current(e.payload))
-    // Ask only once listening, so nothing falls between the held notes and the event. And only
-    // while still mounted: taking them is once-only, so an unmounted effect (StrictMode mounts
-    // twice in dev) must leave them for the next.
-    un.then(() => (live ? invoke<string[]>("app_kit_document_note") : [])).then(
-      (held) => {
-        if (live) for (const m of held) handler.current(m)
-      },
-      () => {},
-    )
-    return () => {
-      live = false
-      un.then((f) => f())
-    }
-  }, [])
-}
+export function useDocumentNotes(_onNote: (message: string) => void): void {}

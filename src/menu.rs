@@ -32,7 +32,6 @@ use crate::guard::{
 };
 use crate::history::{edit_titles, History, HistoryState};
 use crate::recent::{self, Recents};
-use crate::restore::Notes;
 
 /// Fired at the main window for each command the app does not handle natively. Payload: the id.
 pub const COMMAND_EVENT: &str = "command";
@@ -96,10 +95,6 @@ pub struct Kit<R: Runtime> {
     /// File > Open Recent's list, and the submenu rebuilt from it.
     pub(crate) recents: Mutex<Recents>,
     recent_menu: Submenu<R>,
-    /// The Finder has handed over a document, so relaunch restore stands aside.
-    pub(crate) finder_opened: AtomicBool,
-    /// Notes for the webview (a last document that wouldn't reopen), held until it listens.
-    pub(crate) notes: Notes,
 }
 
 impl<R: Runtime> Kit<R> {
@@ -463,8 +458,6 @@ impl<R: Runtime> AppKit<R> {
             untitled: AtomicU32::new(1),
             recents: Mutex::new(Recents::load(app)),
             recent_menu,
-            finder_opened: AtomicBool::new(false),
-            notes: Notes::default(),
         });
         app.set_menu(menu)?;
         refresh_recents(app);
@@ -671,7 +664,7 @@ fn refresh_recents<R: Runtime>(app: &AppHandle<R>) {
 
 /// Put `path` at the top of File > Open Recent and remember it. app-kit does this itself after
 /// Open…, Open Recent and Save; an app calls it when it opens a document some other way (a file
-/// handed over by the Finder, or relaunch restore).
+/// handed over by the Finder).
 pub fn note_recent<R: Runtime>(app: &AppHandle<R>, path: &Path) {
     change_recents(app, |r| r.note(path));
 }
@@ -686,7 +679,7 @@ pub(crate) fn clear_recents<R: Runtime>(app: &AppHandle<R>) {
     change_recents(app, Recents::clear);
 }
 
-/// The recent documents, newest first. The first is the last document, the one relaunch restore reopens.
+/// The recent documents, newest first. The first is the last document.
 pub fn recent_documents<R: Runtime>(app: &AppHandle<R>) -> Vec<PathBuf> {
     app.try_state::<Kit<R>>()
         .map(|kit| kit.recents.lock().expect("recents lock").paths().to_vec())
